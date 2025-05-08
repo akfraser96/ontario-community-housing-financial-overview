@@ -1,0 +1,17 @@
+"0","plot_dat <- dat |>
+  #filter(province %in% c(""ON"", ""BC"", ""AB"", ""QC"")) |>
+   province == ""ON"" |>
+  filter(!is.na(project_status_en) & !is.na(map_category_en_new) & project_status_en != ""New Construction"") |>
+  pivot_longer(
+    cols = c(""number_of_affordable_units"", ""number_of_units""), 
+    names_to = ""Unit Type"", 
+    values_to = ""number_of_units""
+  ) |>
+  mutate(
+        project_status_en = ifelse(project_status_en == ""Financial Commitment"", ""Financial\nCommitment"", project_status_en),
+        project_status_en = ifelse(project_status_en == ""Built"", ""Complete"", project_status_en)) |>
+  group_by(map_category_en_new, project_status_en) 
+"
+"2","Error in province : 
+  The pipe operator requires a function call as RHS (<input>:3:4)
+"

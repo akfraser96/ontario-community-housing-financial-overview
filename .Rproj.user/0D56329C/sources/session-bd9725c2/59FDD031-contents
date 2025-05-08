@@ -1,0 +1,1229 @@
+---
+title: "National Housing Strategy Fund Tracker"
+author: "Ontario Non-Profit Housing Association"
+date: "2025-03-03"
+output:
+  html_document:
+    self_contained: true
+    css: custom-style.css
+    toc: true
+    toc_float: 
+      collapsed: false
+      smooth_scroll: true
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE, fig.align = "center")
+
+library(tidyverse)
+library(ggplot2)
+library(ggmap)
+library(purrr)
+library(dplyr)
+library(showtext)
+library(onphaTheme)
+library(ggtext)
+library(ggiraph)
+library(htmltools)
+library(htmlwidgets)
+library(sf)
+library(leaflet)
+library(fuzzyjoin)
+
+
+  # Set fonts
+  sysfonts::font_add_google("Gabarito", "gabarito", db_cache = FALSE)
+  showtext::showtext_auto() 
+  font_family <- "gabarito"
+  font_colour <- "#282828"
+
+darker_gray_colour <- "#5f5f5f"
+ gray_colour <- "#BFBFBF"
+   purple_gradient <- c("#c9c3ff", "#a092ff", "#8661eb", "#5e24b3", "#37007B")
+  green_gradient <- c("#b6fc77", "#56d444", "#35a626", "#2b8520", "#26661f")
+  distinctive_palette <- c("#D30C55", "#FCBCDA", "#FF8004", "#F9C606")
+
+custom_theme <- theme_bw() +
+  theme(
+    #axis.text.x = element_text(angle = 0, hjust = 0.5, size = 12),
+    #plot.title = element_text(hjust = 0.5, size = 16),
+   # axis.text.y = element_text(size = 10),
+     plot.margin = margin(8, 8, 8, 8),
+      plot.title = element_text(size = 20, lineheight = 0.5, face = "bold", margin = margin(0, 0, 6, 0)),
+      plot.title.position = "plot",
+      #plot.caption = element_text(colour = darker_gray_colour, size = 12, margin = margin(6, 4, 2, 20), hjust = 0),
+      #plot.caption.position = "plot",
+      axis.title.x = element_text(face = "bold", size = 18, margin = margin(6, 0, 0, 0), lineheight = 0.5, hjust = 0.5, angle = 0),
+      axis.title.y = element_text(face = "bold", size = 18, margin = margin(0, 6, 0, 0), lineheight = 0.5, hjust = 0.5),
+      axis.text.x = element_text(face = "plain", size = 18, lineheight = 0.5),
+      axis.text.y = element_text(face = "plain", size = 16),
+      axis.ticks.x = element_line(colour = gray_colour, linewidth = 0.25),
+      axis.ticks.length = unit(0, "mm"),
+      axis.line.x = element_line(linewidth = 0.25, colour = gray_colour), 
+      text = element_text(colour = font_colour),
+    # axis.title.x = element_blank(),
+    legend.text = element_text(size=14),
+    legend.title = element_text(size=14, face = "bold"),
+    plot.caption = ggtext::element_markdown(size = 14, hjust = 0, color = "grey50", margin = margin(t = 10, l = 5)),
+         strip.text = element_text(size = 18))  + 
+  #scale_y_continuous(labels = scales::comma) +
+  labs(
+    x = element_blank())
+
+custom_theme_grid <- theme_bw(base_size = 26) +
+  theme(
+    #axis.text.x = element_text(angle = 0, hjust = 0.5, size = 12),
+    #plot.title = element_text(hjust = 0.5, size = 16),
+   # axis.text.y = element_text(size = 10),
+     plot.margin = margin(8, 8, 0, 8),
+      plot.title = element_text(size = 30, lineheight = 0.9, face = "bold", margin = margin(0, 0, 6, 0)),
+      plot.title.position = "plot",
+      #plot.caption = element_text(colour = darker_gray_colour, size = 12, margin = margin(6, 4, 2, 20), hjust = 0),
+      #plot.caption.position = "plot",
+      #axis.title.x = element_text(face = "plain", size = 24, margin = margin(6, 0, 0, 0), lineheight = 0.9, hjust = 0.5, angle = 0),
+      axis.title.x = element_blank(),
+      axis.title.y = element_text(face = "plain", size = 26, margin = margin(0, 6, 0, 0), lineheight = 0.9, hjust = 0.5),
+      axis.text.x = element_text(face = "plain", size = 20, lineheight = 0.9),
+      axis.text.y = element_text(face = "plain", size = 18),
+      axis.ticks.x = element_line(colour = gray_colour, linewidth = 0.25),
+      axis.ticks.length = unit(0, "mm"),
+      axis.line.x = element_line(linewidth = 0.25, colour = gray_colour), 
+      text = element_text(colour = font_colour),
+    # axis.title.x = element_blank(),
+    legend.text = element_text(size=22),
+    legend.title = element_text(size=22, face = "bold"),
+    plot.caption = ggtext::element_markdown(size = 14, hjust = 0, color = "grey50", margin = margin(t = 10, l = 5)),
+         strip.text = element_text(size = 24))  + 
+  #scale_y_continuous(labels = scales::comma) +
+  labs(
+    x = element_blank())
+
+
+
+custom_theme_widget <- theme_bw() +
+  theme(
+    #axis.text.x = element_text(angle = 0, hjust = 0.5, size = 12),
+    #plot.title = element_text(hjust = 0.5, size = 16),
+   # axis.text.y = element_text(size = 10),
+     plot.margin = margin(12, 12, 4, 12),
+      plot.title = element_text(size = 13, lineheight = 0.9, face = "bold", margin = margin(0, 0, 6, 0)),
+      plot.title.position = "plot",
+      #plot.caption = element_text(colour = darker_gray_colour, size = 12, margin = margin(6, 4, 2, 20), hjust = 0),
+      #plot.caption.position = "plot",
+      #axis.title.x = element_text(face = "plain", size = 24, margin = margin(6, 0, 0, 0), lineheight = 0.9, hjust = 0.5, angle = 0),
+      axis.title.x = element_blank(),
+      axis.title.y = element_text(face = "bold", size = 12, margin = margin(0, 6, 0, 0), lineheight = 0.9, hjust = 0.5),
+axis.text.x = element_text(face = "plain", size = 11, lineheight = 0.4, 
+                           margin = margin(t = 4)),  # Adds 4 pts of space above text
+      axis.text.y = element_text(face = "plain", size = 10),
+      axis.ticks.x = element_line(colour = gray_colour, linewidth = 0.25),
+      axis.ticks.length = unit(0, "mm"),
+      axis.line.x = element_line(linewidth = 0.25, colour = gray_colour), 
+      text = element_text(colour = font_colour),
+    # axis.title.x = element_blank(),
+    legend.text = element_text(size=11),
+    legend.title = element_text(size=11, face = "bold"),
+    plot.caption = ggtext::element_markdown(size = 10, hjust = 0, color = "grey50", margin = margin(t = 10, l = 5)),
+         strip.text = element_text(size = 12))  + 
+  #scale_y_continuous(labels = scales::comma) +
+  labs(
+    x = element_blank())
+
+lab_size_widget <- 4
+
+
+
+grid_text_change <- 8
+
+custom_theme_widget_grid <- theme_bw() +
+  theme(
+    #axis.text.x = element_text(angle = 0, hjust = 0.5, size = 12),
+    #plot.title = element_text(hjust = 0.5, size = 16),
+   # axis.text.y = element_text(size = 10),
+     plot.margin = margin(8, 8, 0, 8),
+      plot.title = element_text(size = 20 + grid_text_change, lineheight = 0.5, face = "bold", margin = margin(0, 0, 6, 0)),
+      plot.title.position = "plot",
+      #plot.caption = element_text(colour = darker_gray_colour, size = 12, margin = margin(6, 4, 2, 20), hjust = 0),
+      #plot.caption.position = "plot",
+      #axis.title.x = element_text(face = "plain", size = 24, margin = margin(6, 0, 0, 0), lineheight = 0.9, hjust = 0.5, angle = 0),
+      axis.title.x = element_blank(),
+      axis.title.y = element_text(face = "bold", size = 14 + grid_text_change, margin = margin(0, 6, 0, 0), lineheight = 0.5, hjust = 0.5),
+      axis.text.x = element_text(face = "plain", size = 12 + grid_text_change, lineheight = 0.4, 
+                           margin = margin(t = 4)),  # Adds 4 pts of space above text
+      axis.text.y = element_text(face = "plain", size = 12 + grid_text_change),
+      axis.ticks.x = element_line(colour = gray_colour, linewidth = 0.25),
+      axis.ticks.length = unit(0, "mm"),
+      axis.line.x = element_line(linewidth = 0.25, colour = gray_colour), 
+      text = element_text(colour = font_colour),
+    # axis.title.x = element_blank(),
+    legend.text = element_text(size=14 + grid_text_change),
+    legend.title = element_text(size=14 + grid_text_change, face = "bold"),
+    plot.caption = ggtext::element_markdown(size = 14 + grid_text_change, hjust = 0, color = "grey50", margin = margin(t = 10, l = 5)),
+         strip.text = element_text(size = 14 + grid_text_change))  + 
+  #scale_y_continuous(labels = scales::comma) +
+  labs(
+    x = element_blank())
+
+
+
+
+highlight_colour = "#ec008c"
+highlight_colour2 = "gray30"
+alternate_colour = "#0693e3"
+alternative <- "grey65"
+
+onpha_pallette <- c("#f78da7","#0693e3","#fcb900", "#9b51e0", "#ff6900")
+
+lab_size <- 6
+
+# Read the data
+dat <- readxl::read_excel("data/NHS Project List - December 2024.xlsx") |> janitor::clean_names()
+
+# Define the program mapping
+program_mapping <- c(
+  "Affordable Housing Fund" = "AHF",
+  "Rapid Housing Initiative" = "RHI",
+  "Rapid Housing Initiative 2" = "RHI",
+  "Rapid Housing Initiative 3" = "RHI",
+  "Apartment Construction Loan Program" = "ACLP",
+  "Affordable Housing Innovation Fund" = "AHIF",
+  "Affordable Housing Innovation Fund 2.0" = "AHIF",
+  "Federal Land Initiative" = "FLI",
+  "Federal Land Disposition" = "FLD"
+)
+
+# Define the province mapping
+province_mapping <- c(
+  "British Columbia" = "BC",
+  "Nova Scotia" = "NS",
+  "Alberta" = "AB",
+  "Ontario" = "ON",
+  "Manitoba" = "MB",
+  "Yukon" = "YT",
+  "Quebec" = "QC",
+  "New Brunswick" = "NB",
+  "Northwest Territories" = "NT",
+  "Nunavut" = "NU",
+  "Newfoundland and Labrador" = "NL",
+  "Saskatchewan" = "SK",
+  "Prince Edward Island" = "PE"
+)
+
+# Apply the mappings and clean the data
+dat <- dat |> 
+  mutate(
+    #Province = str_trim(sub("^.*,(\\s*)", "", Location)),
+    province = recode(province_territory_en, !!!province_mapping),
+    program = recode(program_name_en, !!!program_mapping),
+    province = factor(province, levels = c("BC", "AB", "SK", "MB", "ON", "QC", "NB", "NS", "PE", "NL", "YT", "NT", "NU")))
+
+cma_boundaries <- cancensus::get_census("CA21", regions = list(PR = "35"), level = "CMA", geo_format = "sf") |> select(name)
+
+```
+
+# Overview of NHS Fund Allocation: _projects completed, in progress, or have received funding commitments_ 
+
+This data relates to 5 NHS programs targeted for supply and repairs, such as the Affordable Housing Fund, Rapid Housing Initiative and the Apartment Construction Loan Program.
+
+To date, over 23.7 billion dollars have been allocated or committed to projects across Canada through these programs. The majority of this funding has been allocated to Ontario, with over 11.07 billion dollars in total funding.
+
+Of this 23.7 billion dollars, 6.2 billion dollars are in the form of contribution (26%), and 17.5 billion dollars are in the form of loans (74%).
+
+__Program abbreviations:__ 
+
+* Affordable Housing Fund = AHF
+* Rapid Housing Initiative = RHI
+* Apartment Construction Loan Program = ACLP
+* Affordable Housing Innovation Fund = AHIF
+* Federal Lands Initiative = FLI
+
+__Note about the data:__ funding and unit totals are slightly under counted in this data compared to the aggregate numbers presented in CMHC's progress report. I believe this is likely due to them excluding projects that have conditional commitments from this data, but including them in their reports. I have yet to receive comment from CMHC on this. 
+
+```{r plot-1, fig.width = 12, fig.height = 6}
+# Prepare the data
+total_funding_table <- dat |>
+  filter(!is.na(province)) |>
+  group_by(province) |>
+  summarize(
+    "Total Funding" = sum(program_funding_in_dollars, na.rm = T),
+    "Contributions" = sum(program_contribution_in_dollars, na.rm = T)
+  ) |>
+  mutate("Loans" = `Total Funding` - Contributions)
+
+labels <- total_funding_table |>
+  select(province, `Total Funding`) |>
+  mutate(label = scales::dollar(round(`Total Funding` / 1e9, 2)))
+
+
+# Interactive Plot
+plot_data <- total_funding_table |> 
+  select(-`Total Funding`) |>
+  pivot_longer(
+    cols = c("Contributions", "Loans"), 
+    names_to = "Funding Type", 
+    values_to = "Amount"
+  ) |>
+  mutate(tooltip = paste0("Province: ", province, "<br>",
+    `Funding Type`, ": ", scales::dollar(Amount)))
+  
+p2 <-  plot_data |>
+  ggplot(aes(x = province, y = Amount / 1e9, fill = `Funding Type`)) +
+  geom_col_interactive(
+    position = "stack",
+    aes(tooltip = tooltip)
+  ) +
+ geom_text(
+    data = labels,
+    aes(x = province, y = `Total Funding` / 1e9, label = label),
+    vjust = -0.5,
+    size = lab_size + 1,
+    inherit.aes = FALSE
+  ) +
+  # Interactive labels
+  geom_text_interactive(
+    data = plot_data,
+    aes(
+      x = province, 
+      y = Amount / 1e9,
+      label = "",
+      tooltip = tooltip
+    ),
+    vjust = -0.5,
+    size = lab_size,
+    inherit.aes = FALSE
+  ) +
+  scale_fill_manual(values = c("Contributions" = highlight_colour, "Loans" = alternate_colour)) +
+  scale_y_continuous(labels = scales::dollar, expand = expansion(mult = c(0.05, 0.15))) +
+  labs(
+    title = "Total Funding by Province and Funding Type (Billion $)",
+    x = element_blank(),
+    y = "Amount (Billion $)",
+    fill = "Funding Type:"
+  ) +
+  custom_theme_widget_grid +
+  theme(legend.position = "top",
+         axis.text.y = element_blank())
+
+# Render Interactive Plot
+p2 <- girafe(ggobj = p2, options = list(opts_zoom(min = 0.21, max = 10)))
+
+# Prepare the data
+total_funding_table <- dat |>
+    filter(!is.na(province)) |>
+
+  group_by(province, program) |>
+  summarize(
+    "Total Funding" = sum(`program_funding_in_dollars`, na.rm = T),
+  ) |>
+  mutate(program_full_name = case_when(
+    program == "AHF" ~ "Affordable Housing Fund",
+    program == "RHI" ~ "Rapid Housing Initiative",
+    program == "ACLP" ~ "Apartment Construction Loan Program",
+    program == "AHIF" ~ "Affordable Housing Innovation Fund",
+    program == "FLI" ~ "Federal Lands Initiative",
+    program == "FLD" ~ "Federal Lands Disposition"
+  ),
+    tooltip = paste0("Province: ", province, "<br>",
+    program_full_name, ": ", scales::dollar(`Total Funding`))) 
+
+labels <- total_funding_table |>
+  select(province, `Total Funding`) |>
+  summarize(
+    "Total Funding" = sum(`Total Funding`, na.rm = T),
+  ) |>
+  mutate(label = scales::dollar(round(`Total Funding` / 1e9, 2)))
+
+
+# Plot
+p1 <- total_funding_table |> 
+  ggplot(aes(x = province, y = `Total Funding` / 1e9, fill = program)) +
+  geom_col_interactive(
+    position = "stack",
+    aes(tooltip = tooltip)
+  ) +
+  # Prevent inheriting global aesthetics
+  geom_text(
+    data = labels,
+    aes(x = province, y = `Total Funding` / 1e9, label = label),
+    vjust = -0.5,
+    size = lab_size + 1,
+    inherit.aes = FALSE
+  ) +
+  geom_text_interactive(
+    data = total_funding_table,
+    aes(
+      x = province, 
+      y = `Total Funding` / 1e9,
+      label = "",
+      tooltip = tooltip
+    ),
+    vjust = -0.5,
+    size = lab_size,
+    inherit.aes = FALSE
+  ) +
+  scale_fill_brewer(palette = "Set2") +
+  scale_y_continuous(labels = scales::dollar, expand = expansion(mult = c(0.05, 0.15))) +
+  labs(
+    title = "Total Funding by Province and Program (Billion $)",
+    x = element_blank(),
+    y = "Amount (Billion $)",
+    fill = element_blank()
+  ) +
+  custom_theme_widget_grid +
+  theme(legend.position = "top",
+         axis.text.y = element_blank())
+
+p1 <- girafe(ggobj = p1, options = list(opts_zoom(min = 0.21, max = 10))) # Adjust min and max zoom levels
+
+
+combined <- tagList(
+  tags$div(
+    style = "display: flex; justify-content: space-between; align-items: center; margin-bottom: -5px;", # Reduced bottom margin
+    tags$div(style = "flex: 1; margin-right: 10px;", p1),
+    tags$div(style = "flex: 1;", p2)
+  ),
+  tags$p(
+    style = "text-align: left; margin-top: -5px; font-style: italic; color: #989898;", # Negative margin to reduce spacing
+    "Note: this plot is interactive. Look at the icons on the top right of each plot to enable different interactive actions, such as scrolling in or zooming. Hover over the bars to see more details about the funding amounts and programs."
+  )
+)
+
+# Save or display
+browsable(combined)
+
+```
+
+```{r, echo=FALSE, results='hide'}
+
+# Plot
+p1 <- total_funding_table |> 
+  ggplot(aes(x = province, y = `Total Funding` / 1e9, fill = program)) +
+  geom_col_interactive(
+    position = "stack",
+    aes(tooltip = tooltip)
+  ) +
+  # Prevent inheriting global aesthetics
+  geom_text(
+    data = labels,
+    aes(x = province, y = `Total Funding` / 1e9, label = label),
+    vjust = -0.5,
+    size = lab_size_widget,
+    inherit.aes = FALSE
+  ) +
+  geom_text_interactive(
+    data = total_funding_table,
+    aes(
+      x = province, 
+      y = `Total Funding` / 1e9,
+      label = "",
+      tooltip = tooltip
+    ),
+    vjust = -0.5,
+    size = lab_size_widget,
+    inherit.aes = FALSE
+  ) +
+  scale_fill_brewer(palette = "Set2") +
+  scale_y_continuous(labels = scales::dollar, expand = expansion(mult = c(0.05, 0.15))) +
+  labs(
+    title = "Total Funding by Province and Program (Billion $)",
+    x = element_blank(),
+    y = "Amount (Billion $)",
+    fill = element_blank()
+  ) +
+  custom_theme_widget+
+  theme(legend.position = "top",
+         axis.text.y = element_blank())
+
+p1 <- girafe(ggobj = p1, options = list(opts_zoom(min = 0.21, max = 10)))  # Height in inches) # Adjust min and max zoom levels
+
+if (!dir.exists("blog_figures_v2")) {
+  dir.create("blog_figures_v2")
+}
+
+# Save the interactive plot as an HTML file
+saveWidget(p1, "blog_figures_v2/1 total funding by province and program.html", selfcontained = TRUE)
+
+```
+
+
+
+This funding amount has been used to support 248,131 _new and existing_ units across Canada. 191,823 of these units are considered _affordable_ by CMHC's standards, and 56,308 units are not.
+
+155,354 of these units are repairs and renewals, and 92,748 are new construction. A significant portion of funded units are related to repairing affordable units in Ontario (100,959 units). 
+
+```{r plot-2, fig.width = 12, fig.height = 3.5}
+
+total_units_table <- dat |>
+    filter(!is.na(province)) |>
+
+  mutate(map_category_en_new = case_when(map_category_en_new == "New Construction" ~ "New Construction", 
+                                         map_category_en_new == "Repairs" ~ "Repairs/Renewals",
+                                         map_category_en_new == "Renewals" ~ "Repairs/Renewals",
+                                         TRUE~NA)) |>
+  filter(!is.na(map_category_en_new)) |>
+  group_by(province, map_category_en_new) |>  # Include Project Type
+  summarize(
+    "Total Units" = sum(number_of_units, na.rm = T),
+    "Affordable Units" = sum(number_of_affordable_units, na.rm = T)
+  ) |>
+  mutate("Unaffordable Units" = `Total Units` - `Affordable Units`,
+         tooltip = paste0("Province: ", province, "<br>",
+                          map_category_en_new, ": ", scales::comma(`Total Units`), "<br>",
+                          "Affordable Units: ", scales::comma(`Affordable Units`), "<br>",
+                          "Unaffordable Units: ", scales::comma(`Unaffordable Units`)))
+
+
+labels <- total_units_table |>
+  select(province, map_category_en_new, `Total Units`) |>  # Include Project Type
+  mutate(label = scales::comma(round(`Total Units`), 2))
+
+
+p2 <- total_units_table |> 
+  select(-`Total Units`) |>
+  pivot_longer(
+    cols = c("Affordable Units", "Unaffordable Units"), 
+    names_to = "Unit Type", 
+    values_to = "Amount"
+  ) |>
+  ggplot(aes(x = province, y = Amount, fill = `Unit Type`)) +
+  geom_col_interactive(position = "stack", aes(tooltip = tooltip)) +
+  # Prevent inheriting global aesthetics
+  geom_text(
+    data = labels,
+    aes(x = province, y = `Total Units`, label = label),
+    vjust = -0.5,
+    size = lab_size_widget,
+    inherit.aes = FALSE
+  ) +
+  geom_text_interactive(
+    data = total_units_table,
+    aes(
+      x = province, 
+      y = `Total Units`,
+      label = "",
+      tooltip = tooltip
+    ),
+    vjust = -0.5,
+    size = lab_size,
+    inherit.aes = FALSE
+  ) +
+  scale_fill_manual(values = c("Affordable Units" = highlight_colour, "Unaffordable Units" = alternate_colour)) +
+  labs(
+    title = "Affordable and Unaffordable Units Funded Through NHS Programs",
+    y = "Number of Units",
+    fill = "Unit Type:"
+  ) +
+  custom_theme_widget +
+  theme(plot.title = element_text(size = 14, face = "bold"),
+        legend.position = "top",
+        axis.text.y = element_blank()) +
+  scale_y_continuous(labels = scales::comma, expand = expansion(mult = c(0.05, 0.2))) +
+  labs(x=element_blank()) + 
+  facet_wrap(~map_category_en_new)
+
+
+p2 <- girafe(ggobj = p2, options = list(opts_zoom(min = 0.21, max = 10)))
+
+combined <- tagList(
+  tags$div(
+    style = "display: flex; justify-content: space-between; align-items: center; margin-bottom: -10px;", # Reduced bottom margin
+    tags$div(style = "flex: 1; margin-right: 10px;", p2)
+  ),
+  tags$p(
+    style = "text-align: left; margin-top: -10px; font-style: italic; color: #989898;", # Negative margin to reduce spacing
+    "Note: this plot is interactive. Look at the icons on the top right of each plot to enable different interactive actions, such as scrolling in or zooming. Hover over the bars to see more details about the funding amounts and programs."
+  )
+)
+
+# Save or display
+browsable(combined)
+```
+
+A large portion of funded projects across Canada are not yet complete, especially regarding repairs and renewals. In a following section of this page, we will see that the majority of these expected repairs are within Ontario.
+
+```{r, fig.width = 7, fig.height = 3}
+ 
+plot_dat <- dat |>
+  #filter(province %in% c("ON", "BC", "AB", "QC")) |>
+   filter(province == "ON") |>
+  filter(!is.na(project_status_en) & !is.na(map_category_en_new) & project_status_en != "New Construction") |>
+  pivot_longer(
+    cols = c("number_of_affordable_units", "number_of_units"), 
+    names_to = "Unit Type", 
+    values_to = "number_of_units"
+  ) |>
+  mutate(
+        project_status_en = ifelse(project_status_en == "Financial Commitment", "Financial\nCommitment", project_status_en),
+        project_status_en = ifelse(project_status_en == "Built", "Complete", project_status_en),
+        provider_category = ifelse()) |>
+  group_by(map_category_en_new, project_status_en) |> 
+  summarize("Affordable Units" = sum(number_of_units, na.rm = TRUE),
+            total = sum(number_of_units,na.rm=T),  .groups = 'drop') 
+
+labels <- plot_dat |>
+  group_by(map_category_en_new, project_status_en) |> 
+  summarize(label = sum(`Affordable Units`, na.rm = TRUE), .groups = 'drop')
+
+p3 <- plot_dat |>
+  mutate(project_status_en = ifelse(project_status_en == "Financial Commitment", "Financial\nCommitment", project_status_en),
+         project_status_en = factor(project_status_en, levels = rev(c("Complete", "In Progress", "Financial\nCommitment")))) |>
+  ggplot(aes(x = project_status_en, y = `Affordable Units`, fill = project_status_en)) +
+  geom_col_interactive(position = position_dodge(), color = "black") +
+  custom_theme +
+  geom_text(
+    data = labels,
+    aes(x = project_status_en, y = label, label = scales::comma(label, 2)),
+vjust = -0.5,
+    size = lab_size_widget+ 2,
+    inherit.aes = FALSE
+  ) +
+  labs(
+    title = "What is the status of NHS-funded housing projects?",
+    y = "Affordable and\nUnaffordable Units",  # This becomes the y-axis due to `coord_flip()`
+    x = element_blank(),  # Prevents a duplicated title
+    fill = element_blank()
+  ) +
+  #coord_flip() +
+  scale_y_continuous(labels = scales::comma, expand = expansion(mult = c(0.05, 0.2))) +
+  scale_fill_brewer(palette = "Set2", direction = -1) +
+  theme(
+    legend.position = "none",
+    #plot.title = element_text(size = 14, face = "bold"),
+    #legend.text = element_text(size = 13),
+    #axis.text.x = element_blank(),
+    axis.text.x = element_text(angle = 30, hjust = 1),
+    axis.text.y = element_blank()
+  ) +
+  facet_wrap(~map_category_en_new)
+
+p3
+# p3 <- girafe(
+#   ggobj = p3, 
+#   options = list(opts_zoom(min = 0.21, max = 10)),
+#   width_svg = 7,    # Set the width of the output in inches
+#   height_svg = 3    # Set the height of the output in inches
+# )
+# 
+# browsable(p3)
+
+```
+
+# A Focused Look at Ontario
+
+Community housing providers, Ontario municipalities, and developers have received 11.07 billion dollars in funding so far under the NHS. 2.84 billion dollars of these fund were provided in contribution, and 8.23 billion dollars in loan. Over half ($5.59B) was allocated to the Apartment Construction Loan Program, for the construction of new units. The Affordable Housing Fund received approximately 4.14 billion dollars, and largely funded the repairs of existing units (120,203 units).
+
+Ontario has 36,650 units funded for new construction:
+
+* 15,277 through the Apartment Construction Loan Program
+* 10,126 through the Affordable Housing Fund
+* 2,667 through the Rapid Housing Initiative
+* 7,694 through the Affordable Housing Innovation Fund
+* 886 through Federal Lands Initiative
+
+```{r plot-3, fig.width=12, fig.height=5}
+
+labels <-  dat |>
+  filter(province == "ON") |>
+  group_by(program) |> 
+  summarize("Total Funding" = sum(`program_funding_in_dollars`, na.rm = T))
+
+
+
+plot_dat <- dat |>
+  #filter(province %in% c("ON", "BC", "AB", "QC")) |>
+  filter(province == "ON") |>
+  group_by(program, map_category_en_new) |> 
+  summarize("Total Funding" = sum(`program_funding_in_dollars`, na.rm = T)) |>
+  mutate(tooltip = paste0("Program: ", program, "<br>",
+    map_category_en_new, ": ", scales::dollar(`Total Funding`)))
+
+p1 <- plot_dat |>
+  ggplot(aes(x = program, y = `Total Funding`/1e9, fill = map_category_en_new)) +
+  geom_col_interactive(stat = "identity", position = position_stack(), color = "black", aes(tooltip = tooltip)) +
+  geom_text_interactive(
+    data = plot_dat,
+    aes(
+      x = program, 
+      y = `Total Funding`/1e9,
+      label = "",
+      tooltip = tooltip
+    ),
+    vjust = -0.5,
+    size = lab_size_widget,
+    inherit.aes = FALSE
+  ) +
+  custom_theme_widget_grid +
+  geom_text(
+    data = labels,
+    aes(x = program, y = `Total Funding`/1e9, label = scales::dollar(round(`Total Funding`/1e9, 2))),
+    vjust = -0.5,
+    size = lab_size,
+    inherit.aes = FALSE
+  ) +
+  theme(legend.position = "top", title = element_blank(),
+         axis.text.y = element_blank()) +
+  labs(
+    title = "Total FUNDING by program",
+    x = element_blank(),
+    y = "Total Funding (billions $)",
+    fill = element_blank()
+  ) +
+  scale_y_continuous(labels = scales::dollar, expand = expansion(mult = c(0.05, 0.15))) +
+  scale_fill_brewer(palette = "Set2")
+
+p1 <- girafe(ggobj = p1, options = list(opts_zoom(min = 0.21, max = 10)))
+
+saveWidget(p1, "blog_figures_v2/2_A_total_funding_by_program.html", selfcontained = TRUE)
+
+
+# Prepare the data
+total_funding_table <- dat |>
+  group_by(province) |>
+  summarize(
+    "Total Funding" = sum(`program_funding_in_dollars`, na.rm = T),
+    "Contributions" = sum(program_contribution_in_dollars, na.rm = T)
+  ) |>
+  mutate("Loans" = `Total Funding` - Contributions)
+
+
+# SECOND PLOT
+
+labels <- dat |>
+  filter(province == "ON") |>
+  group_by(program) |> 
+  summarize("Total Units" = sum(number_of_units, na.rm = T))
+
+
+plot_dat <- dat |>
+  #filter(province %in% c("ON", "BC", "AB", "QC")) |>
+  filter(province == "ON") |>
+  group_by(program, map_category_en_new) |> 
+  summarize("Total Units" = sum(number_of_units , na.rm = T)) |>
+  mutate(tooltip = paste0("Program: ", program, "<br>",
+    map_category_en_new, ": ", scales::comma(`Total Units`)))
+  
+p2 <- plot_dat |>
+  ggplot(aes(x = program, y = `Total Units`, fill = map_category_en_new)) +
+  geom_col_interactive(stat = "identity", position = position_stack(), color = "black", aes(tooltip = tooltip)) +
+  geom_text_interactive(
+    data = plot_dat,
+    aes(
+      x = program, 
+      y = `Total Units`,
+      label = "",
+      tooltip = tooltip
+    ),
+   vjust = -0.5,
+    size = lab_size_widget,
+    inherit.aes = FALSE
+  ) +
+  custom_theme_widget_grid +
+  geom_text(
+    data = labels,
+    aes(x = program, y = `Total Units`, label = scales::comma(`Total Units`, 2)),
+    vjust = -0.5,
+    size = lab_size,
+    inherit.aes = FALSE
+  ) +
+  theme(legend.position = "top", title = element_blank(),
+         axis.text.y = element_blank()) +
+  labs(
+    title = "Total UNITS funded by program",
+    x = element_blank(),
+    y = "Total Units",
+    fill = element_blank()
+  ) +
+  scale_y_continuous(labels = scales::comma, expand = expansion(mult = c(0.05, 0.15))) +
+  scale_fill_brewer(palette = "Set2")
+
+p2 <- girafe(ggobj = p2, options = list(opts_zoom(min = 0.21, max = 10))) 
+
+#saveWidget(p2, "blog_figures_v2/2_B_total_funding_by_program.html", selfcontained = TRUE)
+
+
+combined <- tagList(
+  tags$div(
+    style = "display: flex; justify-content: space-between; align-items: center; margin-bottom: -5px;", # Reduced bottom margin
+    tags$div(style = "flex: 1; margin-right: 10px;", p1),
+    tags$div(style = "flex: 1;", p2)
+  ),
+  tags$p(
+    style = "text-align: left; margin-top: -10px; font-style: italic; color: #989898;", # Negative margin to reduce spacing
+    "Note: this plot is interactive. Look at the icons on the top right of each plot to enable different interactive actions, such as scrolling in or zooming. Hover over the bars to see more details about the funding amounts and programs."
+  )
+)
+
+# Save or display
+browsable(combined)
+
+```
+
+
+
+
+Looking specifically at affordable units, the vast majority of units are repairs through funds received by municipalities (96,692 units).
+
+```{r}
+
+  
+plot_dat <- dat |>
+  #filter(province %in% c("ON", "BC", "AB", "QC")) |>
+  filter(province == "ON") |>
+  mutate(map_category_en_new = case_when(map_category_en_new == "New Construction" ~ "New Construction", 
+                                         map_category_en_new == "Repairs" ~ "Repairs/Renewals",
+                                         map_category_en_new == "Renewals" ~ "Repairs/Renewals",
+                                         TRUE~NA)) |>
+  group_by(ultimate_recipient_type_en, map_category_en_new) |> 
+  summarize("Affordable Units" = sum(number_of_affordable_units, na.rm = TRUE),
+            total = sum(number_of_units,na.rm=T),  .groups = 'drop') |>
+  mutate(ultimate_recipient_type_en = forcats::fct_reorder(ultimate_recipient_type_en, `Affordable Units`, .fun = sum, .desc = FALSE),
+         tooltip = paste0("Proponent Type: ", ultimate_recipient_type_en, "<br>",
+                          map_category_en_new, ": ", scales::comma(`Affordable Units`))
+  )
+
+labels <- dat |>
+  filter(province == "ON") |>
+  group_by(ultimate_recipient_type_en) |> 
+  summarize(label = sum(number_of_affordable_units, na.rm = TRUE), .groups = 'drop')
+
+p3 <- plot_dat |>
+  ggplot(aes(x = ultimate_recipient_type_en, y = `Affordable Units`, fill = map_category_en_new)) +
+  geom_col_interactive(position = position_stack(), color = "black", aes(tooltip = tooltip)) +
+  custom_theme_widget +
+  geom_text(
+    data = labels,
+    aes(x = ultimate_recipient_type_en, y = label, label = scales::comma(label, 2)),
+    vjust = 0.5,
+    hjust = -0.15,
+    size = lab_size_widget,
+    inherit.aes = FALSE
+  ) +
+  geom_text_interactive(
+    data = plot_dat,
+    aes(
+      x = ultimate_recipient_type_en, 
+      y = `Affordable Units`,
+      label = "",
+      tooltip = tooltip
+    ),
+    vjust = -0.5,
+    size = lab_size_widget,
+    inherit.aes = FALSE
+  ) +
+  theme(
+    legend.position = "top", 
+    #title = element_blank(),
+    axis.text.x = element_blank(),
+    axis.title.x = element_text(face = "bold", size = 12, margin = margin(6, 0, 0, 0), lineheight = 0.5, hjust = 0.5, angle = 0),
+    axis.title.y = element_text(face = "bold", size = 12, margin = margin(0, 6, 0, 0), lineheight = 0.5, hjust = 0.5)) +
+  labs(
+    title = "Who is receiving funding for AFFORDABLE units?",
+    y = "Affordable Units",  # This becomes the y-axis due to `coord_flip()`
+    x = element_blank(),  # Prevents a duplicated title
+    fill = element_blank()
+  ) +
+  coord_flip() +
+  scale_y_continuous(labels = scales::comma, expand = expansion(mult = c(0.05, 0.2))) +
+  scale_fill_brewer(palette = "Set2") +
+  theme(
+    #legend.text = element_text(size = 13),
+    axis.text.x = element_blank()
+  )
+
+p3 <- girafe(
+    ggobj = p3, 
+    options = list(opts_zoom(min = 0.21, max = 10))
+)
+
+# Save the interactive plot as an HTML file
+saveWidget(p3, "blog_figures_v2/3_affordable_units_by_proponent.html", selfcontained = TRUE)
+
+
+
+# 
+combined <- tagList(
+  tags$div(
+    style = "display: flex; justify-content: space-between; align-items: center; margin: 0 auto; width: 550px; height: 400px;",
+    tags$div(
+      style = "flex: 1; overflow: hidden; justify-content: center; align-items: center;",  # Ensure the plot doesn't overflow
+      p3  # This is your girafe plot
+    )
+  ),
+  tags$p(
+    style = "text-align: left; margin-top: -10px; font-style: italic; color: #989898;",
+    "Note: this plot is interactive. Look at the icons on the top right of each plot to enable different interactive actions, such as scrolling in or zooming. Hover over the bars to see more details about the funding amounts and programs."
+  )
+)
+
+
+browsable(combined)
+```
+
+
+
+Going a level deeper and looking specifically at construction of affordable housing units, private developers are the most common proponent of projects, receiving funds predominately through the ACLP. 
+
+The Affordable Housing Fund goes primarily to non-profit and co-op organizations, and is funding the construction of 6,640 new affordable units across all recipients in Ontario. 
+
+__Note:__ I suspect faith-based recipients receiving Affordable Housing Innovation Funds are primarily doing religious-site conversions. 
+
+```{r}
+plot_dat <- dat |>
+  filter(province == "ON") |>
+  mutate(map_category_en_new = case_when(map_category_en_new == "New Construction" ~ "New Construction", 
+                                         map_category_en_new == "Repairs" ~ "Repairs/Renewals",
+                                         map_category_en_new == "Renewals" ~ "Repairs/Renewals",
+                                         TRUE~NA)) |>
+  filter(map_category_en_new == "New Construction") |>
+  group_by(ultimate_recipient_type_en, program) |> 
+  summarize("Affordable Units" = sum(number_of_affordable_units, na.rm = TRUE), .groups = 'drop') |>
+  mutate(ultimate_recipient_type_en = forcats::fct_reorder(ultimate_recipient_type_en, `Affordable Units`, .fun = sum, .desc = FALSE)) |>
+  mutate(tooltip = paste0("Proponent Type: ", ultimate_recipient_type_en, "<br>",
+                          program, ": ", scales::comma(`Affordable Units`), " affordable units"))
+
+labels <- plot_dat |>
+  group_by(ultimate_recipient_type_en) |> 
+  summarize(label = sum(`Affordable Units`, na.rm = TRUE), .groups = 'drop')
+
+  #mutate(ultimate_recipient_type_en = forcats::fct_reorder(ultimate_recipient_type_en, `Affordable Units`, .fun = sum, .desc = FALSE)) |>
+p <- plot_dat |>  ggplot(aes(x = ultimate_recipient_type_en, y = `Affordable Units`, fill = program)) +
+  geom_col_interactive(stat = "identity", position = position_stack(), color = "black", aes(tooltip = tooltip)) +
+  custom_theme_widget +
+  geom_text(
+    data = labels,
+    aes(x = ultimate_recipient_type_en, y = label, label = scales::comma(label, 2)),
+    vjust = 0.5,
+    hjust = -0.15,
+    size = lab_size_widget,
+    inherit.aes = FALSE
+  ) +
+  geom_text_interactive(
+    data = plot_dat,
+    aes(
+      x = ultimate_recipient_type_en, 
+      y = `Affordable Units`,
+      label = "",
+      tooltip = tooltip
+    ),
+    vjust = -0.5,
+    size = lab_size_widget,
+    inherit.aes = FALSE
+  ) +
+  theme(
+    legend.position = "top", 
+    #title = element_blank(),
+    axis.text.x = element_blank(),
+    axis.title.x = element_text(face = "bold", size = 12, margin = margin(6, 0, 0, 0), lineheight = 0.5, hjust = 0.5, angle = 0),
+    axis.title.y = element_text(face = "bold", size = 12, margin = margin(0, 6, 0, 0), lineheight = 0.5, hjust = 0.5)) +
+  labs(
+    title = "Who is receiving funding for CONSTRUCTION of new AFFORDABLE units?",
+    x = element_blank(),
+    y = "Affordable Units",
+    fill = element_blank()
+  ) +
+  scale_y_continuous(labels = scales::comma,expand = expansion(mult = c(0.05, 0.15))) +
+  coord_flip() +
+  scale_fill_brewer(palette = "Set2")
+
+p <- girafe(
+    ggobj = p, 
+    options = list(opts_zoom(min = 0.21, max = 10))
+)
+
+# 
+combined <- tagList(
+  tags$div(
+    style = "display: flex; justify-content: space-between; align-items: center; margin: 0 auto; width: 550px; height: 400px;",
+    tags$div(
+      style = "flex: 1; overflow: hidden; justify-content: center; align-items: center;",  # Ensure the plot doesn't overflow
+      p  # This is your girafe plot
+    )
+  ),
+  tags$p(
+    style = "text-align: left; margin-top: -10px; font-style: italic; color: #989898;",
+    "Note: this plot is interactive. Look at the icons on the top right of each plot to enable different interactive actions, such as scrolling in or zooming. Hover over the bars to see more details about the funding amounts and programs."
+  )
+)
+
+
+browsable(combined)
+
+```
+
+## Status of Affordable Housing Projects
+
+The majority of these affordable units are not yet completed. Unfortunately expected completion dates are not provided in the data.
+
+```{r, fig.width = 7, fig.height=3}
+ 
+plot_dat <- dat |>
+  #filter(province %in% c("ON", "BC", "AB", "QC")) |>
+  filter(province == "ON" & !is.na(project_status_en)) |>
+  mutate(map_category_en_new = case_when(map_category_en_new == "New Construction" ~ "New Construction", 
+                                         map_category_en_new == "Repairs" ~ "Repairs/Renewals",
+                                         map_category_en_new == "Renewals" ~ "Repairs/Renewals",
+                                         TRUE~NA),
+        project_status_en = ifelse(project_status_en == "Financial Commitment", "Financial\nCommitment", project_status_en),
+         project_status_en = ifelse(project_status_en == "Built", "Complete", project_status_en)) |>
+  group_by(map_category_en_new, project_status_en) |> 
+  summarize("Affordable Units" = sum(number_of_affordable_units, na.rm = TRUE),
+            total = sum(number_of_units,na.rm=T),  .groups = 'drop') 
+
+labels <- plot_dat |>
+  group_by(map_category_en_new, project_status_en) |> 
+  summarize(label = sum(`Affordable Units`, na.rm = TRUE), .groups = 'drop')
+
+p3 <- plot_dat |>
+  mutate(project_status_en = ifelse(project_status_en == "Financial Commitment", "Financial\nCommitment", project_status_en),
+         project_status_en = factor(project_status_en, levels = rev(c("Complete", "In Progress", "Financial\nCommitment")))) |>
+  ggplot(aes(x = project_status_en, y = `Affordable Units`, fill = project_status_en)) +
+  geom_col(position = position_dodge(), color = "black") +
+  custom_theme +
+  geom_text(
+    data = labels,
+    aes(x = project_status_en, y = label, label = scales::comma(label, 2)),
+vjust = -0.5,
+    size = lab_size_widget+ 2,
+    inherit.aes = FALSE
+  ) +
+  labs(
+    title = "What is the status of AFFORDABLE housing projects?",
+    y = "Affordable Units",  # This becomes the y-axis due to `coord_flip()`
+    x = element_blank(),  # Prevents a duplicated title
+    fill = element_blank()
+  ) +
+  #coord_flip() +
+  scale_y_continuous(labels = scales::comma, expand = expansion(mult = c(0.05, 0.2))) +
+  scale_fill_brewer(palette = "Set2", direction = -1) +
+  theme(
+    legend.position = "none",
+    #legend.text = element_text(size = 13),
+    #axis.text.x = element_blank(),
+    axis.text.x = element_text(angle = 30, hjust = 1),
+    axis.text.y = element_blank()
+  ) +
+  facet_wrap(~map_category_en_new, scales = "free_y")
+
+p3
+
+```
+
+### How are these repairs addressing repair backlogs?
+
+According to CMHC's 2023 Social and Affordable Housing Survey, there was an estimated 100,429 community housing units in Ontario that were in _poor_ condition, and 31,462 units that were in _fair_ condition.
+
+The 100,429 estimated units in poor condition align closely to the 100,958 affordable units funded for repairs in Ontario. All repairs funding, including non-affordable units, has been allocated to municipalities, non-profits, coops, or indigenous organizations. 
+ 
+
+__Note:__ CMHC indicates that the majority of their building condition estimates are of low confidence, with the exception of units in poor condition, which was given a score of "good". They include further building condition estimates, including breakdown by urban centres, but the data quality was flagged as too poor to use, so for that reason those interesting data points are not assessed here. 
+
+```{r, fig.width = 7, fig.height=4}
+p <- 100429
+f <- 31462
+
+sahs <- readxl::read_excel("C:/Users/akfra/Downloads/social-affordable-housing-survey-rental-2023-en.xlsx", sheet = "Table 20")
+colnames(sahs) <- sahs[5,]
+sahs <- sahs[85:151,]
+sahs <- sahs |> select(Centre, Fair, Poor) |>   mutate(across(c(Fair, Poor), ~ str_replace_all(., "[^0-9]", "") %>% as.numeric()))
+
+
+d <- dat |> filter(province == "ON" & map_category_en_new %in% c("Repairs", "Renewals")) |> mutate(unaffordable_units = number_of_units - number_of_affordable_units)
+
+d <- d |> st_as_sf(coords = c("longitude", "latitude"), crs = 4326)
+
+
+d <- d |> st_join(cma_boundaries, left = TRUE)
+
+#d <- d |> group_by(name) |> summarize("Total Units" = sum(number_of_affordable_units, na.rm = TRUE)) 
+
+# Calculate the nearest CMA and the distance
+nearest_cma_index <- st_nearest_feature(d, cma_boundaries)
+distances_to_cma <- st_distance(d, cma_boundaries[nearest_cma_index, ], by_element = TRUE)
+
+# Add the nearest CMA name and distance to the data
+d <- d |> 
+  mutate(nearest_cma = cma_boundaries$name[nearest_cma_index],
+         distance_to_cma = as.numeric(distances_to_cma)) |> 
+  st_drop_geometry()
+
+# if less than 5km proximity to centre include in that centre (think this should primarily get reservations)
+d <- d |> mutate(name = ifelse(distance_to_cma < 5000, nearest_cma, name))
+d <- d |> group_by(name) |> summarize("Affordable Units Funded for Repair/Renewal" = sum(number_of_affordable_units, na.rm = TRUE),
+                                      "Non-Affordable Units Funded for Repair/Renewal" = sum(number_of_units - number_of_affordable_units, na.rm = TRUE))
+
+nhs_repair_totals <- d |> ungroup() |> 
+  summarize("Affordable Units Funded for Repair/Renewal" = sum(`Affordable Units Funded for Repair/Renewal`, na.rm = TRUE),
+            "Non-Affordable Units Funded for Repair/Renewal" = sum(`Non-Affordable Units Funded for Repair/Renewal`, na.rm = TRUE))
+
+totals_sahs <- sahs |> filter(Centre == "Total") 
+total_sahs_nhs <- bind_cols(totals_sahs, nhs_repair_totals) |> t() |> as.data.frame() 
+total_sahs_nhs$variable <- row.names(total_sahs_nhs)
+
+total_sahs_nhs <- total_sahs_nhs |> filter(variable %in% c("Fair", "Poor", "Affordable Units Funded for Repair/Renewal", "Non-Affordable Units Funded for Repair/Renewal")) |> 
+  mutate(variable = case_when(
+    variable == "Fair" ~ "Fair Condition",
+    variable == "Poor" ~ "Poor Condition",
+    variable == "Affordable Units Funded for Repair/Renewal" ~ "Affordable Units Funded for Repair/Renewal",
+    variable == "Non-Affordable Units Funded for Repair/Renewal" ~ "Non-Affordable Units Funded for Repair/Renewal",
+
+    TRUE ~ NA_character_
+  ),
+    group = case_when(
+      variable %in% c("Fair Condition", "Poor Condition") ~ "CMHC Building\nCondition Estimates",
+      TRUE ~ "NHS Funded Units\nfor Repair/Renewal"
+    )) |> 
+  rename(value = V1) |>
+  filter(!is.na(variable)) |>
+  mutate(value = as.numeric(value)) |> 
+  group_by(group) |>
+  arrange(desc(value)) |>
+  mutate(label = scales::comma(value),
+         label_pos = cumsum(value))
+
+total_sahs_nhs |>
+  mutate(group = factor(group, levels = c("NHS Funded Units\nfor Repair/Renewal", "CMHC Building\nCondition Estimates")),
+         variable = factor(variable, levels = rev(c("Poor Condition", "Fair Condition", "Affordable Units Funded for Repair/Renewal", "Non-Affordable Units Funded for Repair/Renewal")))) |>
+  ggplot(aes(x = group, y = value, fill = variable)) +
+  geom_col(position = "stack") +
+  geom_text(aes(y = label_pos, label = label), vjust = 1.2, size = lab_size_widget + 3) +
+  scale_fill_manual(values = c("Fair Condition" = "grey75", "Poor Condition" = "grey55", 
+                               "Affordable Units Funded for Repair/Renewal" = highlight_colour,
+                               "Non-Affordable Units Funded for Repair/Renewal" = onpha_pallette[1])) +
+  labs(
+    title = "Comparison of Units Funded for Repair/Renewal to CMHC Building\nCondition Estimates",
+    x = element_blank(),
+    y = "Number of Units",
+    fill = "Category"
+  ) +
+  custom_theme +
+  theme(axis.text.x = element_text(angle = 30, hjust = 1),
+        axis.text.y = element_blank(),
+        #legend.position = "top",
+        legend.title = element_blank(),
+        legend.text = element_text(size=15)) +
+  scale_y_continuous(expand = expansion(mult = c(0.05, 0.1)))
+
+
+```
+
+## Who receives what proportion of funding in Ontario?
+
+Community housing organizations receive approximately 20.5% of all funding through the NHS, and presumably receive a significant amount more indirectly that flow through municipalities and other government recipients. 
+
+Other (primarily private developers) have received over 50% of NHS funds allocated to Ontario so far, however they receive almost exclusively low-cost loans.
+
+```{r, fig.width = 8, fig.height=4, out.extra='style="margin: 0; padding: 0;"'}
+# Use mutate and case_when to create the new column with custom labels
+dat <- dat %>%
+  #filter(`Project Type` == "New Construction") %>%
+  filter(province == "ON") %>%
+  mutate(Organization_Type = case_when(
+    ultimate_recipient_type_en %in% c("Not-for-profit housing org/Co-op", "Indigenous Governing Body", "Faith-based organization", "Indigenous Non-Profit Organization", "Indigenous Group", "Indigenous Non-Profit Organization", "Not-for-profit housing org/Co-op") ~ "Non-Profit, Co-op, Indigenous & Faith groups",
+    ultimate_recipient_type_en %in% c("Province", "Territory", "Municipality") ~ "Government",
+    TRUE ~ "Other"
+  ))
+
+
+# Aggregate data by Organization Type and calculate percentages
+dat_summary_total <- dat %>%
+  group_by(Organization_Type) %>%
+  summarise(
+    `Total Funding` = sum(program_funding_in_dollars, na.rm = TRUE)/1e9
+  ) %>%
+  mutate(Organization_Type = factor(Organization_Type, levels = c("Non-Profit, Co-op, Indigenous & Faith groups", "Government", "Other"))) |>
+  arrange(desc(Organization_Type)) |>
+  mutate(
+    Percentage = round(`Total Funding` / sum(`Total Funding`) * 100, 1),
+    Label = paste0(scales::dollar(`Total Funding`), "B (", Percentage, "%)"),
+    Cumulative = cumsum(`Total Funding`) - (`Total Funding` / 2)) # Midpoint for each segment
+
+# Define custom colors
+custom_colors <- c(
+  "Non-Profit, Co-op, Indigenous & Faith groups" = onpha_pallette[1],
+  "Government" = alternate_colour,
+  "Other" = "grey75"
+)
+
+
+
+# Create Donut Chart
+p0 <- ggplot(dat_summary_total, aes(x = "", y = `Total Funding`, fill = Organization_Type)) +
+  geom_bar(stat = "identity", width = 1, color = "white") +
+  coord_polar(theta = "y") +
+  theme_void() +
+  scale_fill_manual(values = custom_colors) +
+  ggrepel::geom_label_repel(
+    aes(y = Cumulative, label = Label),
+    size = 6,
+    nudge_x = 1,
+    show.legend = FALSE
+  ) +
+  theme(
+    legend.position = "right",
+    legend.title = element_blank(),
+     plot.margin = margin(4, 2, 0, 2),
+      plot.title = element_text(size = 24, lineheight = 0.9, face = "bold", margin = margin(0, 0, 0, 0)),
+      plot.title.position = "plot",
+      #plot.caption = element_text(colour = darker_gray_colour, size = 12, margin = margin(6, 4, 2, 20), hjust = 0),
+      #plot.caption.position = "plot",
+    legend.text = element_text(size=20)
+  ) +
+  labs(title = "Proportion of All Funds")
+
+p0
+
+```
+
+Ontario community housing providers have received 880 million dollars in contribution so far, and 2.8 billion dollars if we presume other government recipients are investing primarily in community housing.  
+
+```{r, fig.width = 8, fig.height=4,out.extra='style="margin: 0; padding: 0;"' }
+# Aggregate data by Organization Type and calculate percentages
+dat_summary_total <- dat %>%
+  group_by(Organization_Type) %>%
+  summarise(
+    `Total Funding` = sum(program_contribution_in_dollars, na.rm = TRUE)/1e9
+  ) %>%
+  mutate(Organization_Type = factor(Organization_Type, levels = c("Non-Profit, Co-op, Indigenous & Faith groups", "Government", "Other"))) |>
+  arrange(desc(Organization_Type)) |>
+  mutate(
+    Percentage = round(`Total Funding` / sum(`Total Funding`) * 100, 1),
+    Label = paste0(scales::dollar(`Total Funding`), "B (", Percentage, "%)"),
+    Cumulative = cumsum(`Total Funding`) - (`Total Funding` / 2)) # Midpoint for each segment
+
+# Define custom colors
+custom_colors <- c(
+  "Non-Profit, Co-op, Indigenous & Faith groups" = onpha_pallette[1],
+  "Government" = alternate_colour,
+  "Other" = "grey75"
+)
+
+
+
+# Create Donut Chart
+p0 <- ggplot(dat_summary_total, aes(x = "", y = `Total Funding`, fill = Organization_Type)) +
+  geom_bar(stat = "identity", width = 1, color = "white") +
+  coord_polar(theta = "y") +
+  theme_void() +
+  scale_fill_manual(values = custom_colors) +
+  ggrepel::geom_label_repel(
+    aes(y = Cumulative, label = Label),
+    size = 6,
+    nudge_x = 1,
+    show.legend = FALSE
+  ) +
+ theme(
+    legend.position = "right",
+    legend.title = element_blank(),
+     plot.margin = margin(4, 2, 0, 2),
+      plot.title = element_text(size = 24, lineheight = 0.9, face = "bold", margin = margin(0, 0, 0, 0)),
+      plot.title.position = "plot",
+      #plot.caption = element_text(colour = darker_gray_colour, size = 12, margin = margin(6, 4, 2, 20), hjust = 0),
+      #plot.caption.position = "plot",
+    legend.text = element_text(size=20)
+  ) +
+  labs(title = "Proportion of Contributions")
+
+p0
+
+```

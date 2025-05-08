@@ -1,0 +1,105 @@
+---
+title: "analyze FOI data"
+author: "Adam Fraser"
+date: "2025-02-26"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(lubridate)
+
+dat <- readr::read_csv("cleaned_foi_data.csv")
+
+```
+
+```{r}
+dat %>%
+  group_by(status) %>%
+  summarize(
+    total_units = sum(total_units, na.rm = TRUE),
+    afford_units = sum(affordable_units_created, na.rm = TRUE),
+    fund_amount = sum(fund_amount, na.rm = TRUE)
+  ) %>%
+  mutate(
+    fund_amount = scales::dollar(fund_amount),
+    total_units = scales::comma(total_units),
+    afford_units = scales::comma(afford_units),
+    status = factor(status, levels = c("Completed", "Under Construction", "Approved",  "Planning"))
+  ) |>
+  arrange(status)
+```
+
+```{r, fig.width=8, fig.height=4}
+
+plot_dat <- dat %>%
+  mutate(
+    clean_date = gsub("‐", "-", expected_completion_date),  # Replace non-standard dash
+    parsed_date = suppressWarnings(as.Date(clean_date, format = "%d-%b-%Y")),
+    year = ifelse(!is.na(year_built), year_built, year(parsed_date)),
+    status = ifelse(status != "Completed" & !is.na(status), "Expected Completion", status)
+  ) %>%
+  group_by(year, status) %>%
+  summarize(
+    total_units = sum(total_units, na.rm = TRUE),
+    afford_units = sum(affordable_units_created, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  pivot_longer(cols = c(total_units, afford_units), names_to = "unit_type", values_to = "count") %>%
+  mutate(status = factor(status, levels = rev(c("Completed", "Expected Completion"))),
+         unit_type = factor(unit_type, c("total_units", "afford_units"))) %>%
+  arrange(year, status) 
+
+labels <- plot_dat %>% 
+  group_by(year, unit_type) %>% 
+  summarize(units = sum(count)) %>% 
+  mutate(label = scales::comma(units))
+
+plot_dat %>%
+  ggplot(aes(x = year, y = count)) +
+  geom_col(aes(fill = status), position = "stack") +
+  geom_text(data = labels, aes(x = year, y = units, label = label), vjust = -0.5) +
+  theme_bw() +
+  facet_wrap(~unit_type, scales = "fixed") +
+  scale_fill_manual(values = c("Completed" = "darkgreen", "Expected Completion" = "red")) +
+  theme(legend.position = "top",
+        axis.text.y = element_blank()) +
+  scale_y_continuous(expand = expansion(mult = c(0.05, 0.15)))
+
+
+```
+
+most units were built under bilateral funds with Federal government (OPHI and COCHI). These units would be counted under NHS data (not separate/ in addition to NHS unit estimates)
+
+```{r}
+dat |>
+  group_by(fund_source) |>
+  summarize(
+    total_units = sum(total_units, na.rm = TRUE),
+    afford_units = sum(affordable_units_created, na.rm = TRUE),
+    fund_amount = sum(fund_amount, na.rm = TRUE)
+  ) |>
+  arrange(desc(total_units)) |>
+  mutate(fund_amount = scales::dollar(fund_amount),
+         total_units = scales::comma(total_units),
+         afford_units = scales::comma(afford_units))
+```
+
+
+```{r}
+providers <- dat |>
+  group_by(housing_provider) |>
+  summarize(total_units = sum(total_units, na.rm = T),
+            afford_units = sum(affordable_units_created, na.rm = T),
+            fund_amount = sum(fund_amount, na.rm = T)) |> arrange(desc(fund_amount)) |> mutate(fund_amount = scales::dollar(fund_amount))
+```
+
+
+```{r}
+dat |> group_by(municipality) |> summarize(total_units = sum(total_units, na.rm = T),
+            afford_units = sum(affordable_units_created, na.rm = T),
+            fund_amount = sum(fund_amount, na.rm = T)) |> arrange(desc(fund_amount)) |> mutate(fund_amount = scales::dollar(fund_amount))
+```
+

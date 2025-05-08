@@ -1,0 +1,29 @@
+"0","exp_summary <- exp |> 
+  group_by(year, assistance_type) |> 
+  summarize(
+    total_service_manager_expenditure = sum(total_service_manager_expenditure, na.rm = TRUE), 
+    total_households = sum(service_manager_funded_household, na.rm = TRUE),
+    entries = n()
+  ) |>
+  group_by(assistance_type) |>
+  arrange(year) |>
+  mutate(
+    expenditure_per_household = total_service_manager_expenditure / total_households,
+    change_expenditure = expenditure_per_household - lag(expenditure_per_household),
+    pct_change = change_expenditure / lag(expenditure_per_household) * 100,
+    label_text = paste0(
+      scales::dollar(round(expenditure_per_household,0)),
+      ifelse(year == 2023,paste0(
+      "" ("", 
+      ifelse(change_expenditure >= 0, ""+"", """"), 
+      scales::percent(pct_change / 100, accuracy = 0.1), "")""
+    ),"""")),
+    assistance_type = factor(
+      assistance_type, 
+      levels = c(""Rent Supplement"", ""Portable Housing Benefit"", ""Other Expenditures Enabling Reduced Rent"")
+    )
+  )
+"
+"1","[38;5;233m`summarise()` has grouped output by 'year'. You can
+override using the `.groups` argument.[39m
+"

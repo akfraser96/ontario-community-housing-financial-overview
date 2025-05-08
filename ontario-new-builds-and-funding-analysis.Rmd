@@ -1,0 +1,1463 @@
+---
+title: "Ontario Community Housing Financial Breakdown (in progress)"
+author: "Ontario Non-Profit Housing Association"
+date: "2025-05-01"
+output:
+  html_document:
+    toc: true                
+    toc_float: true         
+    number_sections: true    
+    css: C:/Users/akfra/Documents/GitHub/ONPHA/SMAIR_data/custom-style.css  
+
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE, fig.align = "center")
+
+library(tidyverse)
+library(ggplot2)
+library(ggmap)
+library(purrr)
+library(dplyr)
+library(showtext)
+library(onphaTheme)
+library(ggtext)
+library(ggiraph)
+library(htmltools)
+library(htmlwidgets)
+library(sf)
+library(leaflet)
+library(fuzzyjoin)
+
+
+# Set fonts
+  sysfonts::font_add_google("Gabarito", "gabarito", db_cache = FALSE)
+  showtext::showtext_auto() 
+  font_family <- "gabarito"
+  font_colour <- "#282828"
+
+  
+highlight_colour = "#ec008c"
+highlight_colour2 = "gray30"
+alternate_colour = "#0693e3"
+alternative <- "grey65"
+
+onpha_pallette <- c("#f78da7","#0693e3","#fcb900", "#9b51e0", "#ff6900")
+
+lab_size <- 3
+lab_size_grid <- 4
+lab_size_widget <- 3
+
+nhs_plot_size_reduction <- -17
+add_size <- 0
+
+darker_gray_colour <- "#5f5f5f"
+ gray_colour <- "#BFBFBF"
+   purple_gradient <- c("#c9c3ff", "#a092ff", "#8661eb", "#5e24b3", "#37007B")
+  green_gradient <- c("#b6fc77", "#56d444", "#35a626", "#2b8520", "#26661f")
+  distinctive_palette <- c("#D30C55", "#FCBCDA", "#FF8004", "#F9C606")
+  
+custom_theme <- function(base_size = 14, add_size = 0, base_theme = ggplot2::theme_minimal()) {
+  base_theme +   theme(
+    #axis.text.x = element_text(angle = 0, hjust = 0.5, size = 12),
+    #plot.title = element_text(hjust = 0.5, size = 16),
+   # axis.text.y = element_text(size = 10),
+     plot.margin = margin(8, 8, 0, 8),
+      plot.title = element_text(size = 30 + add_size, lineheight = 0.9, face = "bold", margin = margin(0, 0, 6, 0)),
+      plot.title.position = "plot",
+      #plot.caption = element_text(colour = darker_gray_colour, size = 12, margin = margin(6, 4, 2, 20), hjust = 0),
+      #plot.caption.position = "plot",
+      #axis.title.x = element_text(face = "plain", size = 24, margin = margin(6, 0, 0, 0), lineheight = 0.9, hjust = 0.5, angle = 0),
+      axis.title.x = element_blank(),
+      axis.title.y = element_text(face = "plain", size = 26+ add_size, margin = margin(0, 6, 0, 0), lineheight = 0.9, hjust = 0.5),
+      axis.text.x = element_text(face = "plain", size = 20+ add_size, lineheight = 0.9),
+      axis.text.y = element_text(face = "plain", size = 18+ add_size),
+      axis.ticks.x = element_line(colour = gray_colour, linewidth = 0.25),
+     axis.ticks.y = element_blank(),
+      axis.ticks.length = unit(0, "mm"),
+      axis.line.x = element_line(linewidth = 0.25, colour = gray_colour), 
+      text = element_text(colour = font_colour),
+    # axis.title.x = element_blank(),
+    legend.text = element_text(size=26+ add_size, lineheight = 0.9),
+    legend.title = element_text(size=26+ add_size, face = "bold"),
+    plot.caption = ggtext::element_markdown(size = 14+ add_size, hjust = 0, color = "grey50", margin = margin(t = 10, l = 5)),
+         strip.text = element_text(size = 24+ add_size))  + 
+  #scale_y_continuous(labels = scales::comma) +
+  labs(
+    x = element_blank())
+}
+
+
+# Read the data
+dat <- readxl::read_excel("C:/Users/akfra/Documents/GitHub/ONPHA/CMHC data/data/NHS Project List - December 2024.xlsx") |> janitor::clean_names()
+
+# Define the program mapping
+program_mapping <- c(
+  "Affordable Housing Fund" = "AHF",
+  "Rapid Housing Initiative" = "RHI",
+  "Rapid Housing Initiative 2" = "RHI",
+  "Rapid Housing Initiative 3" = "RHI",
+  "Apartment Construction Loan Program" = "ACLP",
+  "Affordable Housing Innovation Fund" = "AHIF",
+  "Affordable Housing Innovation Fund 2.0" = "AHIF",
+  "Federal Land Initiative" = "FLI",
+  "Federal Land Disposition" = "FLD"
+)
+
+# Define the province mapping
+province_mapping <- c(
+  "British Columbia" = "BC",
+  "Nova Scotia" = "NS",
+  "Alberta" = "AB",
+  "Ontario" = "ON",
+  "Manitoba" = "MB",
+  "Yukon" = "YT",
+  "Quebec" = "QC",
+  "New Brunswick" = "NB",
+  "Northwest Territories" = "NT",
+  "Nunavut" = "NU",
+  "Newfoundland and Labrador" = "NL",
+  "Saskatchewan" = "SK",
+  "Prince Edward Island" = "PE"
+)
+
+# Apply the mappings and clean the data
+dat <- dat |> 
+  mutate(
+    #Province = str_trim(sub("^.*,(//s*)", "", Location)),
+    province = recode(province_territory_en, !!!province_mapping),
+    program = recode(program_name_en, !!!program_mapping),
+    province = factor(province, levels = c("BC", "AB", "SK", "MB", "ON", "QC", "NB", "NS", "PE", "NL", "YT", "NT", "NU")))
+```
+
+This report provides a brief breakdown of funding sources for Ontario's community housing sector. These analyses are based off data from Service Manager Annual Information Return (SMAIR), provincial funding for community housing construction, and National Housing Strategy (NHS) project-based funding data. These datasets were provided with little context or data definitions, so this report heavily relies on interpretation and assumptions. I plan to engage in some outreach to validate or contextualize this preliminary interpretations. 
+
+For a better look at the projects funded through the National Housing Strategy and their present status, see this [NHS funds breakdown](https://akfraser96.github.io/nhs-fund-tracker/).
+
+# Ontario Community Housing Financial Summary
+
+## Overview of Financial Data
+
+Here is an overview of the financial data made available to ONPHA. This displays total funding by funding source, see the following sections for a deeper look.
+
+__Data Sources:__
+
+Service Manager Annual Information Return (SMAIR) data: highlights annual operating subsidies for legacy programs and rent supplements. This view is broken down by "ongoing", "targeted" and "one-time" funding. Following sections provide a breakdown of how the funding is distributed across these various programs.
+
+National Housing Strategy project-based data: includes funding for new construction, repairs, and renewals, and includes the Affordable Housing Fund, Rapid Housing Initiative, Apartment Construction Loan Program, Federal Lands Initiative, and Affordable Housing Innovation Fund. This is the only data source that indicates if funds are in loans or in contribution.
+
+Provincial funds for new community housing projects: limited to new projects completed or in the pipeline between 2020 and 2024. This data includes funds for new projects delivered in part through programs such as OPHI, COCHI, Indigenous Supportive Housing Program, Social Services Relief Fund and more.  
+
+I tied funding to year, but in an inconsistent manner, due to availability of dates provided in the data. NHS project-based data includes funding announcement date, and the provincial data includes project completion/expected completion dates.
+
+__Notes:__ 
+
+Important buckets of funding not available:
+
+* Municipal budgets or Housing Plans (for capital/land investments, levys, etc)
+* Homelessness Prevention Program (HPP) reporting (for non-HSA funded programs)
+* .... 
+
+I understand these are largely separate buckets of funding, but I suspect there are overlaps in instances. For example, COCHI or OPHI funding could be a source of funding for rent supplement that is counted in the SMAIR as an operating subsidy, and theoretically that rent supplement could also be treated as a subsidy to support the finances for new construction. Also, NHS programs like the Affordable Housing Fund funded a very large number of repairs. It is possible that these funds are also counted in the SMAIR as an operating subsidy.
+
+None of these values are inflation adjusted.
+
+
+
+```{r}
+
+nhs_funds <- dat |>
+  filter(province == "ON") |>
+   mutate(
+        provider_category = ifelse(ultimate_recipient_type_en %in% c("Private Enterprise/Builder/Developer", "Partnership", "Other (Please specify)"),  "For-Profit Entity", "Community Housing"),
+        year = year(announcement_date_qa)
+        ) |>
+  filter(provider_category == "Community Housing") |>
+  group_by(year) |>
+  summarize(
+    #total_funding = sum(program_funding_in_dollars, na.rm = TRUE),
+    contribution = sum(program_contribution_in_dollars, na.rm = TRUE),
+    loan = sum(program_loan_in_dollars, na.rm = TRUE)
+  ) |>
+  pivot_longer(
+    cols = c(contribution, loan),
+    names_to = "Funding Type",
+    values_to = "fund_amount"
+  ) |> 
+  mutate(type = "NHS Project Based Funding (construction/repairs) - Indexed to project announcement date")
+  
+
+pfoi <- readr::read_csv("C:/Users/akfra/Documents/GitHub/ONPHA/provincial funding/cleaned_foi_data.csv")
+pfoi <- pfoi |>
+  mutate(
+    expected_completion_date_clean = str_replace_all(expected_completion_date, "[^0-9A-Za-z ]", "-"),
+    expected_completion_date_parsed = dmy(expected_completion_date_clean),
+    year = ifelse(!is.na(year_built), year_built, year(expected_completion_date_parsed))
+  ) |>
+  filter(year > 2017) |>
+  mutate(fund_source = ifelse(grepl("Social Services Relief Fund", fund_source), "Social Services Relief Fund", fund_source))
+
+
+pfoi <- pfoi |>
+  #filter(!is.na(fund_source)) |>
+  group_by(year, fund_source) |>
+  summarize(
+    fund_amount = sum(fund_amount, na.rm = TRUE)
+  ) |> 
+  mutate(type = "Provincial Funding for New Construction - Indexed to project completion or expected completion date") |>
+  rename(
+    `Funding Type` = fund_source
+  )
+
+
+smair_dp <- "C:/Users/akfra/Documents/GitHub/ONPHA/SMAIR_data/Freedom of Information Request MMAH 2024-172/"
+dp_23 <- paste0(smair_dp,"2024-172 - Responsive Record 2 (2023).xlsx")
+dp_20_22 <- paste0(smair_dp,"2024-172 - Responsive Record 1 (2020-2022).xlsx")
+
+fins_23 <- readxl::read_excel(dp_23, sheet = "Financial") |> janitor::clean_names() |> mutate(year = as.double(year))
+fins_20_22 <- readxl::read_excel(dp_20_22, sheet = "Financial") |> janitor::clean_names() |> rename(sm_symbol = s_msymbol, targeted = target)
+fins_ham_23 <- fins_20_22 |> filter(year == 2022 & sm_symbol == "HAM") |> mutate(year = 2023)
+
+fins <- bind_rows(fins_23, fins_ham_23, fins_20_22) |> filter(!sm_symbol %in% c("MCS", "MOH", "DEB")) 
+fins <- fins |> mutate(across(c(targeted, ongoing, one_time), ~replace_na(.x, 0))) # Replace NA with 0 for targeted, ongoing, and one_time columns
+fin_summary <- fins |> 
+  group_by(year) |> 
+  summarize(
+    Targeted = sum(targeted, na.rm = TRUE),
+    Ongoing = sum(ongoing, na.rm = TRUE),
+    `One Time` = sum(one_time, na.rm = TRUE)
+  ) |>
+  pivot_longer(
+    cols = c(Ongoing, "One Time", Targeted),
+    names_to = "Funding Type",
+    values_to = "fund_amount"
+  ) |>
+  mutate(type = "SMAIR -  Annual operating subsidies by reporting year")
+
+# Combine the data
+combined_data <- bind_rows(nhs_funds, pfoi, fin_summary) |>
+  mutate(tooltip = paste0(
+    "Funding Type: ", `Funding Type`, "<br>",
+    "Year: ", year, "<br>",
+    "Funding Amount: ", scales::dollar(fund_amount)
+  )) |>
+  mutate(type = factor(type, 
+    levels = c("SMAIR -  Annual operating subsidies by reporting year",
+               "NHS Project Based Funding (construction/repairs) - Indexed to project announcement date",
+               "Provincial Funding for New Construction - Indexed to project completion or expected completion date")
+  )) 
+
+
+fund_plot <- ggplot(combined_data, aes(x = factor(year), y = fund_amount, fill = `Funding Type`)) +
+  geom_col_interactive(aes(tooltip = tooltip), position = position_stack()) +
+  scale_y_continuous(labels = scales::dollar) +
+  geom_text_interactive(
+    aes(x = factor(year), y = fund_amount, label = "",
+        tooltip = tooltip),
+    inherit.aes = FALSE) +
+  geom_text(
+    data = combined_data |> group_by(year, type) |> summarize(fund_amount = sum(fund_amount, na.rm = TRUE), .groups = 'drop'),
+    aes(x = factor(year), y = fund_amount, label = scales::dollar(fund_amount/1e9)),
+    vjust = -0.5,
+    size = lab_size_widget,
+    inherit.aes = FALSE
+  ) +
+  labs(
+    title = "Funding Amount by Year (Billions)",
+    x = "Year",
+    y = "Funding Amount (Billions)",
+    fill = "Funding Type"
+  ) +
+  #scale_fill_brewer(palette = "Set2", direction = 1) +
+  custom_theme(base_theme = theme_bw(), add_size = -16) +
+  theme(legend.position = "none",
+        axis.text.y = element_blank(),
+        axis.text.x = element_text(size = 10)) +
+  scale_y_continuous(expand = expansion(mult = c(0.05, 0.2))) +
+  facet_wrap(~type, ncol = 1)
+
+fund_plot <- girafe(
+  ggobj = fund_plot,
+  options = list(opts_zoom(min = 0.21, max = 15))
+  #width_svg = 7,    # Set the width of the output in inches
+  #height_svg = 3    # Set the height of the output in inches
+)
+
+combined <- tagList(
+  tags$div(
+    style = "display: flex; justify-content: space-between; align-items: center; margin-bottom: -5px;",
+    tags$div(style = "flex: 1; margin-right: 10px;", fund_plot)
+  ),
+  tags$p(
+    style = "text-align: left; margin-top: -5px; font-style: italic; color: #989898;",
+    HTML(
+      "Note: this plot is interactive. Hover over the bars to see funding amounts by different sub categories or programs. Look at the icons on the top right of each plot to enable different interactive actions, such as scrolling in or zooming."
+    )
+  )
+)
+
+browsable(combined)
+```
+
+# A Deeper Look: Service Manager Operating Subsidies
+
+Here are the total annual operating subsidies again, but this time including a breakdown by program. Funding increased by $161 million between 2020 and 2023, and $95 million between 2022 and 2023.
+
+
+__Notes about the data: __
+
+* In 2023 there was another $124 million of finances related to the Ministry of Health and Ministry of Children, Community and Social Services. I don't believe this is actual new funding, but rather a change in what the data tracking includes. Therefore this $124 million was excluded from these figures for a better comparison between years.
+* Hamilton did not report for 2023, so I used their 2022 values to fill in for 2023. 
+
+
+```{r, fig.width=6, fig.height=4}
+
+smair_dp <- "C:/Users/akfra/Documents/GitHub/ONPHA/SMAIR_data/Freedom of Information Request MMAH 2024-172/"
+
+dp_23 <- paste0(smair_dp,"2024-172 - Responsive Record 2 (2023).xlsx")
+dp_20_22 <- paste0(smair_dp,"2024-172 - Responsive Record 1 (2020-2022).xlsx")
+
+
+
+fins_23 <- readxl::read_excel(dp_23, sheet = "Financial") |> janitor::clean_names() |> mutate(year = as.double(year))
+fins_20_22 <- readxl::read_excel(dp_20_22, sheet = "Financial") |> janitor::clean_names() |> rename(sm_symbol = s_msymbol, targeted = target)
+fins_ham_23 <- fins_20_22 |> filter(year == 2022 & sm_symbol == "HAM") |> mutate(year = 2023)
+
+program_colors <- c(
+  "01Public Housing"          = "#1b9e77",  # Teal green
+  "02RS"                      = "#d95f02",  # Orange (Rent Supplement)
+  "06Provincial Reformed"     = "#7570b3",  # Purple
+  "07Post 85 UN"              = "#e7298a",  # Pink (Urban Native)
+  "06Section 95 MNP"          = "#66a61e",  # Olive green
+  "08Pre 86 UN"               = "#e6ab02",  # Mustard yellow (older Urban Native)
+  "03LD"                      = "#a6761d",  # Brown (Limited Dividend)
+  "05Section 95 PNP"          = "#666666",  # Grey (Private Non-Profit)
+  "04Section 26/27_27"        = "#1f78b4"   # Blue (older public housing)
+)
+
+# type_colors <- c(
+#   "Ongoing"  = "#1b9e77",  # Teal green – stable, continuous
+#   "One Time" = "#d95f02",  # Orange – distinctive, temporary
+#   "Targeted" = "#7570b3"   # Purple – focus-specific
+# )
+
+type_colors <- c(
+  "Ongoing"  = "darkolivegreen3", 
+  "Targeted" = "darksalmon", # Teal (cooler & brighter than program teal)
+  "One Time" = "cornflowerblue"  # Bright yellow (not used in program set)
+  # Deep sky blue (more saturated than #1f78b4)
+)
+
+# type_colors <- c(
+#   "Ongoing"  = "#3B9AB2",  # Soft blue-teal — stable and calm
+#   "One Time" = "#E1AF00",  # Warm gold — attention-grabbing but not harsh
+#   "Targeted" = ""   # Bold coral-red — sharp and purpose-driven
+# )
+
+
+fins <- bind_rows(fins_23, fins_ham_23, fins_20_22)
+fins <- fins |> filter(!sm_symbol %in% c("MCS", "MOH", "DEB")) 
+fins <- fins |> mutate(across(c(targeted, ongoing, one_time), ~replace_na(.x, 0))) # Replace NA with 0 for targeted, ongoing, and one_time columns
+fin_summary <- fins |> 
+  group_by(year) |> 
+  summarize(
+    Targeted = sum(targeted, na.rm = TRUE),
+    Ongoing = sum(ongoing, na.rm = TRUE),
+    `One Time` = sum(one_time, na.rm = TRUE)
+  )
+
+
+# Reshape data to long format for plotting
+fin_summary_long <- fin_summary %>%
+  pivot_longer(
+    cols = c(Ongoing, "One Time", Targeted),
+    names_to = "type",
+    values_to = "amount"
+  ) %>%
+  mutate(type = factor(type, levels = c("One Time","Targeted", "Ongoing")),
+         tooltip = paste0(
+           "Year: ", year, "<br>",
+           "Funding Type: ", type, "<br>",
+           "Amount: ", scales::dollar(amount)
+         ))
+
+# Create a stacked bar chart with total labels above the bars
+p1 <- ggplot(fin_summary_long, aes(x = factor(year), y = amount / 1e9, fill = type)) +
+  geom_col_interactive(aes(tooltip=tooltip), position = position_stack()) +  # Stacked bars
+  geom_text_interactive(
+    aes(x = factor(year), y = amount / 1e9, label = "", tooltip = tooltip),
+     inherit.aes = FALSE
+  ) +  # Add interactive text labels
+  geom_text(
+    data = fin_summary_long %>%
+      group_by(year) %>%
+      summarize(total_amount = sum(amount, na.rm = TRUE) / 1e9),
+    aes(x = factor(year), y = total_amount, label = scales::dollar(total_amount)),
+    vjust = -0.5, size = lab_size_widget+2, inherit.aes = FALSE
+  ) +  # Add total labels above stacked bars
+  scale_y_continuous(labels = scales::dollar, expand = expansion(mult = c(0, 0.1))) +
+    scale_fill_manual(values = type_colors) +
+
+  labs(
+    title = "Financial Summary by Year\n(Billion $)",
+    x = NULL,
+    y = "Amount (Billion $)",
+    fill = NULL
+  ) +
+  custom_theme(add_size = -12, base_theme = theme_bw()) +
+  theme(
+    #plot.title = element_text(hjust = 0.5, size = 16),
+    axis.text.x = element_text(angle = 0, hjust = 0.5, size = 10),
+    axis.text.y = element_blank(), 
+    legend.position = "right"
+  )
+
+
+fin_programs <- fins |> 
+  mutate(total = targeted + ongoing + one_time) |>
+  group_by(year, program) |> 
+  summarize(
+    total = sum(total, na.rm = TRUE)) |>
+  mutate(tooltip = paste0(
+    "Year: ", year, "<br>",
+    "Program: ", program, "<br>",
+    "Amount: ", scales::dollar(total)
+  ))
+  
+
+
+
+# Create a stacked bar chart with total labels above the bars
+p2 <- ggplot(fin_programs, aes(x = factor(year), y = total / 1e9, fill = program)) +
+  geom_col_interactive(aes(tooltip=tooltip), position = position_stack(reverse = TRUE)) +  # Stacked bars
+  geom_text_interactive(
+    aes(x = factor(year), y = total / 1e9, label = "", tooltip = tooltip),
+    inherit.aes = FALSE
+  ) +  # Add interactive text labels
+  geom_text(
+    data = fin_programs %>%
+      group_by(year) %>%
+      summarize(total_amount = sum(total, na.rm = TRUE) / 1e9),
+    aes(x = factor(year), y = total_amount, label = scales::dollar(total_amount)),
+    vjust = -0.5, size = lab_size_widget+2, inherit.aes = FALSE
+  ) +  # Add total labels above stacked bars
+  scale_y_continuous(labels = scales::dollar, expand = expansion(mult = c(0, 0.1))) +
+  scale_fill_manual(values = program_colors) +
+  #scale_fill_brewer(palette = "Set2", direction = 1) +
+  guides(fill = guide_legend(reverse = TRUE)) +
+  labs(
+    title = "Financial Summary by Year\nand Program (Billion $)",
+    x = NULL,
+    y = "Amount (Billion $)",
+    fill = NULL
+  ) +
+  custom_theme(add_size = -12, base_theme = theme_bw()) +
+  theme(
+    #plot.title = element_text(hjust = 0.5, size = 16),
+    axis.text.x = element_text(angle = 0, hjust = 0.5, size = 10),
+    axis.text.y = element_blank(), 
+    legend.position = "right"
+  )
+
+
+
+
+p1 <- girafe(
+  ggobj = p1,
+  options = list(opts_zoom(min = 0.21, max = 10))
+  #width_svg = 7,    # Set the width of the output in inches
+  #height_svg = 3    # Set the height of the output in inches
+)
+
+p2 <- girafe(
+  ggobj = p2,
+  options = list(opts_zoom(min = 0.21, max = 10))
+  #width_svg = 7,    # Set the width of the output in inches
+  #height_svg = 3    # Set the height of the output in inches
+)
+
+combined <- tagList(
+  tags$div(
+    style = "display: flex; justify-content: space-between; align-items: center; margin-bottom: -5px;", # Reduced bottom margin
+    tags$div(style = "flex: 1; margin-right: 10px;", p1),
+    tags$div(style = "flex: 1;", p2)
+  ),
+  tags$p(
+    style = "text-align: left; margin-top: -5px; font-style: italic; color: #989898;", # Negative margin to reduce spacing
+    HTML("Note: values are not inflation adjusted. This plot is interactive. Look at the icons on the top right of each plot to enable different interactive actions, such as scrolling in or zooming. Hover over the bars to see more details about the funding amounts and programs."
+  ))
+)
+
+browsable(combined)
+```
+
+## Operating Subidy Changes per Program
+
+Public Housing, Rent Supplement, and Provincially Reformed programs are where most of the increased spending occurred. Section 95 Private Non-Profits, Pre 86 Urban Native, and Section 26/27 had large percentages of their funding lost since 2020.
+
+Here are some possible reasons as to why we are observing these changes. I plan to do some outreach to try to validate these assumptions:
+
+* Public Housing: The increase in funding is likely due to ageing infrastructure requiring more operational support. Some private non-profit projects have been transferred to local housing corporations, Resulting in a small increase in total public housing units.
+* Rent Supplement: The increase in funding is likely due expanded reliance on housing people in the private market. The average rent supplement also increased between 2022-2023, likely because cost of the supplements are tied to increased market rents.
+* Provincially Reformed: ????
+* Programs with a loss: these programs with large losses in funded have also had large proportions of their stock no longer counted in Service Manager data. Presumably a portion of these are no longer operating under service manager agreements.
+
+```{r smair-program-funding-changes, fig.width=12}
+
+# Assuming the `unit_summary` tibble is created as follows:
+fund_summary <- fin_programs |>
+  group_by(program) |>
+  arrange(year) |>
+  mutate(total = total / 1e5,
+         funds_2020 = ifelse(any(year == 2020), first(total), NA),
+         `fund Change from 2020` = round(total - funds_2020,1),
+         pct_change =  (`fund Change from 2020`) / funds_2020 * 100,
+         label_text = paste0(
+                      ifelse(`fund Change from 2020` >= 0, "+$", "$"), 
+                              scales::comma(`fund Change from 2020`),
+                      " (", scales::percent(pct_change / 100, accuracy = 0.1), ")"
+    )) |>
+  ungroup() |>
+  mutate(
+    label_text =  label_text)
+
+
+# Find the maximum absolute value for each Program
+program_max <- fund_summary %>%
+  group_by(program) %>%
+  summarize(max_change = max(abs(`fund Change from 2020`), na.rm = TRUE))
+
+
+fund_summary <- fund_summary %>%
+  left_join(program_max, by = "program") %>%
+  mutate(
+    # Nudge: 5% of max, but minimum 100 funds
+    label_nudge = pmax(0.05 * max_change, 100),
+    label_position = ifelse(`fund Change from 2020` >= 0,
+                             `fund Change from 2020` + label_nudge,
+                             `fund Change from 2020` - label_nudge),
+    vjust = ifelse(`fund Change from 2020` >= 0, -0.5, 1.5),
+  )
+
+
+fund_summary <- fund_summary %>%
+  #mutate( `Unit Change from 2020` = ifelse(grepl("Agreement", Program), `Total Units` - 0, `Total Units` - first(`Total Units`))) |>
+  filter(year != 2020)
+
+
+
+ggplot(fund_summary, aes(x = factor(year), y = `fund Change from 2020`, fill = program)) +
+  geom_bar(stat = "identity") +
+  geom_text(
+    aes(
+      y = `fund Change from 2020`,
+      label = label_text,
+       vjust = vjust
+    ),
+    size = 8
+  ) +
+   scale_y_continuous(labels = scales::dollar, expand = expansion(mult = c(0.25, 0.25))) +
+  #scale_fill_brewer(palette = "Set2", direction = 1) +
+  guides(fill = guide_legend(reverse = TRUE)) +
+  scale_fill_manual(values = program_colors) +
+  labs(
+    title = "Change in Annual Operating Subsidy Amount from 2020 ($100,000)",
+    x = NULL,
+    y = "Amount ($100,000)",
+    fill = NULL
+  ) +
+  #custom_theme(add_size = -12, base_theme = theme_bw()) +
+  geom_hline(yintercept = 0, color = "black", size = 1) +
+  theme_bw() +
+  theme(
+    element_text(size = 24),  # Increase all text elements uniformly
+    axis.text.x = element_text(angle = 0, hjust = 0.5, size = 22),
+    plot.margin = margin(8, 8, 0, 8),
+      plot.title = element_text(size = 30 + add_size, lineheight = 0.9, face = "bold", margin = margin(0, 0, 6, 0)),
+      plot.title.position = "plot",
+    strip.text = element_text(size = 24),
+    axis.text.y = element_blank(),
+    axis.title.y = element_text(size = 28),
+    axis.ticks = element_blank(),
+    legend.position = "none"
+  ) +
+  facet_wrap(~program, scales = "free_y")
+
+
+
+
+```
+
+## Operating Subidy Changes by Funding Type
+
+All funding types saw increases since 2020. Ongoing funding peaked at 2021 and has two consecutive decreases. One time funding increased over 200% just in the year 2023. 
+
+Here are some possible reasons as to why we are observing these changes. I plan to do some outreach to try to validate these assumptions:
+* Ongoing funding: The decrease in funding after 2021 may be related to expiration of service manager agreements. 
+* Targeted funding: The increase in funding may be attributed to targeting recipients through increased rent supplements or through population specific approaches targeting Indigenous or homeless populations.
+* One-time funding: ??? Repairs? .
+
+
+
+```{r smair-type-funding-changes, fig.width=12, fig.height=3}
+
+# Assuming the `unit_summary` tibble is created as follows:
+fund_summary <- fin_summary_long |>
+  group_by(type) |>
+  arrange(year) |>
+  mutate(amount = amount / 1e5,
+         funds_2020 = ifelse(any(year == 2020), first(amount), NA),
+         `fund Change from 2020` = round(amount - funds_2020,1),
+         pct_change =  (`fund Change from 2020`) / funds_2020 * 100,
+         label_text = paste0(
+                      ifelse(`fund Change from 2020` >= 0, "+$", "$"), 
+                              scales::comma(`fund Change from 2020`),
+                      " (", scales::percent(pct_change / 100, accuracy = 0.1), ")"
+    )) |>
+  ungroup() |>
+  mutate(
+    label_text =  label_text)
+
+
+# Find the maximum absolute value for each type
+type_max <- fund_summary %>%
+  group_by(type) %>%
+  summarize(max_change = max(abs(`fund Change from 2020`), na.rm = TRUE))
+
+
+fund_summary <- fund_summary %>%
+  left_join(type_max, by = "type") %>%
+  mutate(
+    # Nudge: 5% of max, but minimum 100 funds
+    label_nudge = pmax(0.05 * max_change, 100),
+    label_position = ifelse(`fund Change from 2020` >= 0,
+                             `fund Change from 2020` + label_nudge,
+                             `fund Change from 2020` - label_nudge),
+    vjust = ifelse(`fund Change from 2020` >= 0, -0.5, 1.5),
+  )
+
+
+fund_summary <- fund_summary %>%
+  #mutate( `Unit Change from 2020` = ifelse(grepl("Agreement", type), `amount Units` - 0, `amount Units` - first(`amount Units`))) |>
+  filter(year != 2020)
+
+
+
+ggplot(fund_summary, aes(x = factor(year), y = `fund Change from 2020`, fill = type)) +
+  geom_bar(stat = "identity") +
+  geom_text(
+    aes(
+      y = `fund Change from 2020`,
+      label = label_text,
+       vjust = vjust
+    ),
+    size = 8
+  ) +
+   scale_y_continuous(labels = scales::dollar, expand = expansion(mult = c(0.2, 0.2))) +
+  scale_fill_manual(values = type_colors) +
+  guides(fill = guide_legend(reverse = TRUE)) +
+  labs(
+    title = "Change in Annual Operating Subsidy Amount from 2020 ($100,000)",
+    x = NULL,
+    y = "Amount ($100,000)",
+    fill = NULL
+  ) +
+  #custom_theme(add_size = -12, base_theme = theme_bw()) +
+  geom_hline(yintercept = 0, color = "black", size = 1) +
+  theme_bw() +
+  theme(
+    element_text(size = 24),  # Increase all text elements uniformly
+    axis.text.x = element_text(angle = 0, hjust = 0.5, size = 22),
+    plot.margin = margin(8, 8, 0, 8),
+      plot.title = element_text(size = 30 + add_size, lineheight = 0.9, face = "bold", margin = margin(0, 0, 6, 0)),
+      plot.title.position = "plot",
+    strip.text = element_text(size = 24),
+    axis.text.y = element_blank(),
+    axis.title.y = element_text(size = 28),
+    axis.ticks = element_blank(),
+    legend.position = "none"
+  ) +
+  facet_wrap(~type, scales = "fixed", ncol = 3)
+
+
+
+
+```
+
+### Operating Subidy Changes by Funding Type and Program
+
+The following figures show the funding changes for each year compared to 2020. The text labels show the total funding change from 2020 (in thousands), and components that fall below the black line (negative values) are components of that funding that decreased from 2020. You can zoom into the plots to obtain a better view of any particular program.
+
+* Public Housing: most new funding is going towards Public Housing as One Time or Targeted funding. Ongoing funding only increased by 2.3%, much less than inflation. 
+* Rent Supplement: Ongoing investment in 02 Rent Supplement program increased by 11.8% since 2020. 
+* Provincial Reformed: there has been no increase in ongoing funding since 2020. There has been a small increase in One Time and Targeted spending. 
+
+
+```{r prog-type-funding-change, fig.width=12, fig.height= 5}
+prog_type <- fins |> 
+  group_by(year, program) |> 
+  summarize(
+    Targeted = sum(targeted, na.rm = TRUE),
+    Ongoing = sum(ongoing, na.rm = TRUE),
+    `One Time` = sum(one_time, na.rm = TRUE)
+  )
+
+
+# Reshape data to long format for plotting
+prog_type <- prog_type %>%
+  pivot_longer(
+    cols = c(Ongoing, "One Time", Targeted),
+    names_to = "type",
+    values_to = "amount"
+  ) %>%
+  group_by(program, type) |>
+  arrange(year) |>
+  mutate(value_2020 = first(amount),
+         change_from_2020 = amount - value_2020,
+         pct_change =  (change_from_2020 / value_2020) * 100,
+        
+        tooltip = paste0(
+                      "Year: ", year, "<br>",
+                      "Program: ", program, "<br>",
+                     "Funding Type: ", type, "<br>",
+                     "Funding Change from 2020: ", scales::comma(change_from_2020), "<br>",
+                     "Percent Change from 2020: ", pct_change, "<br>",
+                     "Total Funding: ", scales::comma(amount))) |>
+  ungroup() |>
+  filter(year > 2020)
+         
+
+
+
+# Calculate the total unit change by program
+total_change_prog <- prog_type %>%
+  group_by(program, year) %>%
+  arrange(year) |>
+  mutate(label_placement = ifelse(change_from_2020 < 0, 0, change_from_2020), 
+         label_placement = sum(label_placement)) |>
+  summarize(amount = sum(amount, na.rm = TRUE),
+            change_from_2020 = sum(change_from_2020, na.rm = TRUE),
+            value_2020 = sum(value_2020, na.rm = T),
+            label_placement = first(label_placement)) |>
+  ungroup() |>
+  mutate(   pct_change = change_from_2020 / value_2020 * 100,
+            label_text = paste0(
+                      ifelse(change_from_2020 >= 0, "+", ""), 
+                              scales::comma(round(change_from_2020/1000,0)),
+                      " (", scales::percent(pct_change / 100, accuracy = 0.1), ")")) |>
+  ungroup()
+
+
+# Reorder programs by total unit change
+plot_summary <- prog_type %>%
+  left_join(total_change_prog |> select(year, program, label_text, label_placement, change_from_2020), by = c("year", "program")) %>%
+  mutate(program = forcats::fct_reorder(program, -change_from_2020.y)) |>
+  ungroup()
+
+# Plot with reordered programs and labels
+p1 <- plot_summary |> ggplot(aes(x = factor(year), y = change_from_2020.x, fill = type)) +
+  geom_col_interactive(
+     position = position_stack(reverse = FALSE),
+    aes(tooltip = tooltip)
+  ) +
+  # Interactive labels
+  geom_text_interactive(
+    data = plot_summary,
+    aes(
+      x = factor(year), 
+      y = change_from_2020.x,
+      label = "",
+      tooltip = tooltip
+    ),
+    vjust = -0.7,
+    size = lab_size,
+    inherit.aes = FALSE
+  ) +
+  labs(
+    title = "Yearly Change in Funding by Program and Unit Type (Thousands $)",
+    x = element_blank(),
+    y = "Funding - Previous Years' Funding\n(Thousands $)",
+    fill = "Funding Type"
+  ) +
+  custom_theme(add_size = -12, base_theme = theme_bw()) +
+  scale_fill_manual(values = type_colors) +
+  scale_y_continuous(labels = scales::comma, expand = expansion(mult = c(0.05, 0.22))) +
+  theme(
+    #axis.text.x = element_text(angle = 45, hjust = 1, size = 14),
+    #plot.title = element_text(hjust = 0.5, size = 16),
+    legend.position = "right",
+      axis.title.x = element_blank(),
+
+      axis.text.x = element_text(face = "plain",size = 12, lineheight = 0.9),
+      axis.text.y = element_blank(),
+      #axis.ticks.x = element_line(colour = gray_colour, linewidth = 0.25),
+     axis.ticks.y = element_blank(),
+      #axis.ticks.length = unit(0, "mm"),
+      #axis.line.x = element_line(linewidth = 0.25, colour = gray_colour), 
+      #text = element_text(colour = font_colour),
+    # axis.title.x = element_blank(),
+    #legend.text = element_text(size=21+ add_size),
+    #legend.title = element_text(size=23+ add_size, face = "bold"),
+   # plot.caption = ggtext::element_markdown(size = 14+ add_size, hjust = 0, color = "grey50", margin = margin(t = 10, l = 5)),
+         #strip.text = element_text(size = 24+ add_size)
+  ) +
+  geom_hline(yintercept = 0, color = "black", size = 0.5) +
+  # Add labels for total unit change above each bar
+  geom_text(
+    data = total_change_prog,
+    aes(x = factor(year), vjust = -0.5, y = label_placement,
+        label = label_text),
+    inherit.aes = FALSE, color = "black", size = 4
+  ) +
+  facet_wrap(~program, ncol = 3, scales = "fixed") 
+  #scale_y_continuous(scales::comma())
+
+p1 <- girafe(ggobj = p1, options = list(opts_zoom(min = 0.21, max = 10))) # Adjust min and max zoom levels
+
+
+combined <- tagList(
+  tags$div(
+    style = "display: flex; justify-content: space-between; align-items: center; margin-bottom: -5px;", # Reduced bottom margin
+    tags$div(style = "flex: 1; margin-right: 10px;", p1)
+  ),
+  tags$p(
+    style = "text-align: left; margin-top: -5px; font-style: italic; color: #989898;", # Negative margin to reduce spacing
+    "Note: this plot is interactive. Look at the icons on the top right of each plot to enable different interactive actions, such as scrolling in or zooming. Hover over the bars to see more details about the funding amounts and programs."
+  )
+)
+
+# Save or display
+browsable(combined)
+
+```
+
+In this view focused on funding type we see the following:
+
+* A big increase in One Time funding going primarily to Public Housing and Provincial Reformed programs.
+* A large increase in Targeted funding going to Public Housing, Provincial Reformed, and Rent Supplement programs.
+* Ongoing investments dropping from 2021, largely related to Public Housing. 
+
+```{r type-prog-funding-change, fig.width=12, fig.height= 3}
+# Calculate the total unit change by program
+total_change_type <- prog_type %>%
+  group_by(type, year) %>%
+  arrange(year) |>
+  mutate(label_placement = ifelse(change_from_2020 < 0, 0, change_from_2020), 
+         label_placement = sum(label_placement)) |>
+  summarize(amount = sum(amount, na.rm = TRUE),
+            change_from_2020 = sum(change_from_2020, na.rm = TRUE),
+            value_2020 = sum(value_2020, na.rm = T),
+            label_placement = first(label_placement)) |>
+  ungroup() |>
+  mutate(   pct_change = change_from_2020 / value_2020 * 100,
+            label_text = paste0(
+                      ifelse(change_from_2020 >= 0, "+", ""), 
+                              scales::comma(round(change_from_2020/1000,0)),
+                      " (", scales::percent(pct_change / 100, accuracy = 0.1), ")")) |>
+  ungroup()
+
+
+# Reorder programs by total unit change
+plot_summary <- prog_type %>%
+  left_join(total_change_type |> select(year, type, label_text, label_placement, change_from_2020), by = c("year", "type")) %>%
+  mutate(type = forcats::fct_reorder(type, -change_from_2020.y)) |>
+  ungroup()
+
+# Plot with reordered programs and labels
+p1 <- plot_summary |> ggplot(aes(x = factor(year), y = change_from_2020.x, fill = program)) +
+  geom_col_interactive(
+     position = position_stack(reverse = FALSE),
+    aes(tooltip = tooltip)
+  ) +
+  # Interactive labels
+  geom_text_interactive(
+    data = plot_summary,
+    aes(
+      x = factor(year), 
+      y = change_from_2020.x,
+      label = "",
+      tooltip = tooltip
+    ),
+    vjust = -0.7,
+    size = lab_size,
+    inherit.aes = FALSE
+  ) +
+  labs(
+    title = "Yearly Change in Funding by Program and Unit Type (Thousands $)",
+    x = element_blank(),
+    y = "Funding - Previous Years'\nFunding (Thousands $)",
+    fill = "Funding Type"
+  ) +
+  custom_theme(add_size = -12, base_theme = theme_bw()) +
+  #scale_fill_brewer(palette = "Set2", direction = 1) +
+  scale_fill_manual(values = program_colors) +
+  scale_y_continuous(labels = scales::comma, expand = expansion(mult = c(0.05, 0.17))) +
+  theme(
+    #axis.text.x = element_text(angle = 45, hjust = 1, size = 14),
+    #plot.title = element_text(hjust = 0.5, size = 16),
+    legend.position = "right",
+      axis.title.x = element_blank(),
+
+      axis.text.x = element_text(face = "plain",size = 12, lineheight = 0.9),
+      axis.text.y = element_blank(),
+      #axis.ticks.x = element_line(colour = gray_colour, linewidth = 0.25),
+     axis.ticks.y = element_blank(),
+      #axis.ticks.length = unit(0, "mm"),
+      #axis.line.x = element_line(linewidth = 0.25, colour = gray_colour), 
+      #text = element_text(colour = font_colour),
+    # axis.title.x = element_blank(),
+    #legend.text = element_text(size=21+ add_size),
+    #legend.title = element_text(size=23+ add_size, face = "bold"),
+   # plot.caption = ggtext::element_markdown(size = 14+ add_size, hjust = 0, color = "grey50", margin = margin(t = 10, l = 5)),
+         #strip.text = element_text(size = 24+ add_size)
+  ) +
+  geom_hline(yintercept = 0, color = "black", size = 0.5) +
+  # Add labels for total unit change above each bar
+  geom_text(
+    data = total_change_type,
+    aes(x = factor(year), vjust = -0.5, y = label_placement,
+        label = label_text),
+    inherit.aes = FALSE, color = "black", size = 4
+  ) +
+  facet_wrap(~type, ncol = 3, scales = "fixed") 
+  #scale_y_continuous(scales::comma())
+
+p1 <- girafe(ggobj = p1, options = list(opts_zoom(min = 0.21, max = 10))) # Adjust min and max zoom levels
+
+
+combined <- tagList(
+  tags$div(
+    style = "display: flex; justify-content: space-between; align-items: center; margin-bottom: -5px;", # Reduced bottom margin
+    tags$div(style = "flex: 1; margin-right: 10px;", p1)
+  ),
+  tags$p(
+    style = "text-align: left; margin-top: -5px; font-style: italic; color: #989898;", # Negative margin to reduce spacing
+    "Note: this plot is interactive. Look at the icons on the top right of each plot to enable different interactive actions, such as scrolling in or zooming. Hover over the bars to see more details about the funding amounts and programs."
+  )
+)
+
+# Save or display
+browsable(combined)
+
+```
+
+
+
+
+## Increased cost of rent supplements 
+
+This data shows expenditures for types of rent reduction provided by the SMAIR data. These rent supplements can be distinct from the 02 Rent Supplement program, but it is unclear to me if there is overlap at all. 
+
+There is a very large cost increase in each expenditure category for a single year when looking at average cost per household. This is likely due to the fact that the cost of rent supplements and portable benefits correspond to growth in market rents. This may be a warning to growing our reliance on the private market. 
+
+* Note that this data was very sparse and not consistently reported. Data was only provided for 2022-2023. 
+
+```{r, fig.width=8, fig.height=3}
+exp_23 <- readxl::read_excel(dp_23, sheet = "SM_Funded_Assistance") |> janitor::clean_names() |> 
+  mutate(year = as.double(year)) |> 
+  select(year,sm_symbol, assistance_type, service_manager_funded_household, total_service_manager_expenditure)
+exp_20_22 <- readxl::read_excel(dp_20_22, sheet = "SM Funded Assistance") |> janitor::clean_names() |>
+  rename("total_service_manager_expenditure" = "total_service_manager_expenditures_by_type") |>
+  select(year, sm_symbol, assistance_type, service_manager_funded_household = households_assisted_with_service_manager_funded_housing_assistance_or_rent_reduction_by_type,  total_service_manager_expenditure)
+
+exp <- bind_rows(exp_23, exp_20_22)
+
+exp <- exp |> mutate(assistance_type = recode(
+  assistance_type,
+  "Rent_Supp" = "Rent Supplement",
+  " Portable Housing Benefit" = "Portable Housing Benefit",
+  "PHB" = "Portable Housing Benefit",
+  "Other_Reduced_Rent" = "Other Expenditures Enabling Reduced Rent"
+)) |>
+  mutate(assistance_type = str_trim(assistance_type))
+
+# weird values, e.g., multiple households but no expenditure.. 
+exp <- exp |>
+  filter(service_manager_funded_household > 10 & total_service_manager_expenditure > 500)
+
+exp_summary <- exp |> 
+  group_by(year, assistance_type) |> 
+  summarize(
+    total_service_manager_expenditure = sum(total_service_manager_expenditure, na.rm = TRUE), 
+    total_households = sum(service_manager_funded_household, na.rm = TRUE),
+    entries = n()
+  ) |>
+  group_by(assistance_type) |>
+  arrange(year) |>
+  mutate(
+    expenditure_per_household = total_service_manager_expenditure / total_households,
+    change_expenditure = expenditure_per_household - lag(expenditure_per_household),
+    pct_change = change_expenditure / lag(expenditure_per_household) * 100,
+    label_text = paste0(
+      scales::dollar(round(expenditure_per_household,0)),
+      ifelse(year == 2023,paste0(
+      " (", 
+      ifelse(change_expenditure >= 0, "+", ""), 
+      scales::percent(pct_change / 100, accuracy = 0.1), ")"
+    ),"")),
+    assistance_type = factor(
+      assistance_type, 
+      levels = c("Rent Supplement", "Portable Housing Benefit", "Other Expenditures Enabling Reduced Rent")
+    )
+  )
+
+# Plotting
+p <- ggplot(exp_summary, aes(x = factor(year), y = expenditure_per_household, fill = assistance_type)) +
+  geom_col_interactive(position = position_dodge(width = 0.8), color = "black") +
+  geom_text(
+    aes(label = label_text),
+    position = position_dodge(width = 0.8),
+    vjust = -0.5,
+    size = 6
+  ) +
+  labs(
+    title = "Average Rent Reduction Expenditure Per Household (excludes COHB)",
+    x = "Year",
+    y = "Amount",
+    fill = NULL
+  ) +
+    scale_fill_manual(
+    values = c(
+      "Portable Housing Benefit" = "#4DAF4A",
+      "Other Expenditures Enabling Reduced Rent" = "#FF7F00",
+      "Rent Supplement" = "#377EB8"
+    )
+  ) +
+  scale_y_continuous(expand = expansion(mult = c(0.05, 0.2))) +
+  custom_theme(add_size = -4, base_theme = theme_bw() ) +
+  theme(
+    legend.position = "top",
+    axis.title.y = element_blank(),
+    axis.title.x = element_blank(),
+    axis.text.y = element_blank()
+  )
+
+p 
+```
+
+
+# A Deeper Look: NHS Project-Based Funding
+
+I will build this out shortly.. In the meantime, a more devoted breakdown of the NHS can be found [here](https://akfraser96.github.io/nhs-fund-tracker/)
+
+
+```{r builds-by-status, fig.width = 7, fig.height = 2, include = FALSE}
+ 
+on_builds <- dat |>
+   filter(province == "ON") |>
+  filter(!is.na(project_status_en) & !is.na(map_category_en_new) & map_category_en_new == "New Construction") |>
+  mutate(unaffordable_units = number_of_units - number_of_affordable_units) |>
+  pivot_longer(
+    cols = c("number_of_affordable_units", "number_of_units", "unaffordable_units"), 
+    names_to = "Unit Type", 
+    values_to = "number_of_units"
+  ) |>
+  mutate(
+        project_status_en = ifelse(project_status_en == "Financial Commitment", "Financial Commitment", project_status_en),
+        project_status_en = ifelse(project_status_en == "Built", "Complete", project_status_en),
+        provider_category = ifelse(ultimate_recipient_type_en %in% c("Private Enterprise/Builder/Developer", "Partnership", "Other (Please specify)"),  "For-Profit Entity", "Community Housing")) |>
+  filter(provider_category == "Community Housing")
+
+
+
+units_builds_status <- on_builds |>
+  
+  group_by(project_status_en, `Unit Type`) |> 
+  summarize("Unit Count" = sum(number_of_units, na.rm = TRUE), .groups = 'drop') |>
+  mutate(`Unit Type` = recode(`Unit Type`, 
+    "number_of_affordable_units" = "Affordable Units",
+    "unaffordable_units" = "Unaffordable Units"),
+    project_status_en = factor(project_status_en, 
+      levels = rev(c("Financial Commitment", "In Progress", "Complete"))
+    ))
+
+
+p3 <- units_builds_status |>
+  filter(`Unit Type` != "number_of_units") |>
+  ggplot(aes(x = `Unit Type`, y = `Unit Count`, fill = `Unit Type`)) +
+  geom_col_interactive(position = position_dodge()) +
+  geom_text(
+    #data = labels,
+    aes(x = `Unit Type`, y = `Unit Count`, label = scales::comma(`Unit Count`)),
+vjust = -0.5,
+    size = lab_size_widget,
+    inherit.aes = FALSE
+  ) +
+  labs(
+    title = "A. NHS-Funded Construction of New Commnity Housing in Ontario",
+    y = "Number of Units",  # This becomes the y-axis due to `coord_flip()`
+    x = element_blank(),  # Prevents a duplicated title
+    fill = element_blank()
+  ) +
+  scale_y_continuous(labels = scales::comma, expand = expansion(mult = c(0.05, 0.5))) +
+  scale_fill_brewer(palette = "Set2", direction = 1) +
+  custom_theme(base_theme = theme_bw(), add_size = nhs_plot_size_reduction) +
+  theme(
+    #legend.position = "none",
+    #plot.title = element_text(size = 14, face = "bold"),
+    #legend.text = element_text(size = 14),
+    #axis.text.x = element_blank(),
+    #axis.text.x = element_text(angle = 30, hjust = 1),
+    axis.text.x = element_blank(),
+    axis.text.y = element_blank(),
+    legend.position = "top"
+  ) +
+  facet_wrap(~project_status_en) 
+
+p3 <- girafe(
+  ggobj = p3,
+  options = list(opts_zoom(min = 0.21, max = 10))
+  #width_svg = 7,    # Set the width of the output in inches
+ # height_svg = 3    # Set the height of the output in inches
+)
+
+combined <- tagList(
+  tags$div(
+    style = "display: flex; justify-content: space-between; align-items: center; margin-bottom: -5px;",
+    tags$div(style = "flex: 1; margin-right: 10px;", p3)
+  )
+  # tags$p(
+  #   style = "text-align: left; margin-top: -5px; font-style: italic; color: #989898;",
+  #   HTML(
+  #     "Note: this plot is interactive. Look at the icons on the top right of each plot to enable different interactive actions, such as scrolling in or zooming. Hover over the bars to see more details about the funding amounts and programs.<br><br>These are units funded throughout the duration of the Rapid Housing Initiative, Apartment Construction Loan Program, Affordable Housing Fund, Affordable Housing Innovation Fund, and the Federal Lands Initiative. These numbers include projects where the lead proponent is a non-profit, co-op, municipality, province, or Indigenous organization."
+  #   )
+  #)
+)
+
+
+# Save or display
+browsable(combined)
+
+```
+
+
+```{r builds-by-proponent, fig.width = 7, fig.height=3, include = FALSE}
+proponents <- on_builds |>
+  group_by(ultimate_recipient_type_en, project_status_en, `Unit Type`) |>
+  summarize("Unit Count" = sum(number_of_units, na.rm = TRUE), .groups = 'drop') |>
+ filter( !grepl("Financial",project_status_en)) |>
+  mutate(ultimate_recipient_type_en = recode(ultimate_recipient_type_en,
+                "Not-for-profit housing org/Co-op" = "Non-Profit / Co-op",
+                "Indigenous Non-Profit Organization" = "Indigenous Non-Profit"
+                ),
+    ultimate_recipient_type_en = factor(ultimate_recipient_type_en, 
+    levels = c("Non-Profit / Co-op", "Municipality","Indigenous Governing Body", "Indigenous Group", "Faith-based organization", "Indigenous Non-Profit")),
+    `Unit Type` = recode(`Unit Type`,
+      "number_of_affordable_units" = "Affordable Units",
+      "unaffordable_units" = "Unaffordable Units",
+      number_of_units = "number_of_units"),
+    `Unit Type` = factor(`Unit Type`, levels = c("Affordable Units", "Unaffordable Units", "number_of_units")),
+    tooltip = paste0(
+      "Lead Proponent Type: ", ultimate_recipient_type_en, "<br>",
+      `Unit Type`, ": ", `Unit Count`, "<br>",
+      "Project Status: ", project_status_en, "<br>",
+      "amount Units: ", scales::comma(`Unit Count`)))
+    
+
+labels <- proponents |>
+  filter(`Unit Type` == "number_of_units")
+
+
+
+
+prop_p <- proponents |>
+  filter(`Unit Type` != "number_of_units") |>
+  ggplot(aes(x = ultimate_recipient_type_en, y = `Unit Count`, fill = `Unit Type`)) +
+  geom_col_interactive(aes(tooltip = tooltip), position = position_stack(reverse = TRUE)) +
+  geom_text_interactive(
+    aes(x = ultimate_recipient_type_en, y = `Unit Count`, label = "",
+    tooltip = tooltip),
+    #size = lab_size_widget,
+    inherit.aes = FALSE) |>
+  custom_theme(add_size = nhs_plot_size_reduction, base_theme = theme_bw()) +
+  geom_text(
+    data = labels,
+    aes(x = ultimate_recipient_type_en, y = `Unit Count`, label = scales::comma(`Unit Count`)),
+vjust = -0.5,
+    size = lab_size_widget,
+    inherit.aes = FALSE
+  ) +
+  #scale_fill_manual(values = c("Affordable Units" = highlight_colour, "Unaffordable Units" = alternate_colour)) +  
+  scale_fill_brewer(palette = "Set2", direction = 1) +
+  labs(
+    title = "B. NHS-Funded Construction by Organization Type",
+    y = "Number of Units",  # This becomes the y-axis due to `coord_flip()`
+    x = element_blank(),  # Prevents a duplicated title
+    fill = element_blank()
+  ) +
+  #coord_flip() +
+  scale_y_continuous(labels = scales::comma, expand = expansion(mult = c(0.05, 0.5))) +
+  theme(
+    legend.position = "top",
+    #plot.title = element_text(size = 14, face = "bold"),
+    #legend.text = element_text(size = 14),
+    #axis.text.x = element_blank(),
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 8),
+    axis.text.y = element_blank()
+    #legend.position = "top"
+  ) +
+  facet_wrap(~project_status_en) 
+
+
+prop_p <- girafe(
+  ggobj = prop_p,
+  options = list(opts_zoom(min = 0.21, max = 10))
+  #width_svg = 7,    # Set the width of the output in inches
+  #height_svg = 3    # Set the height of the output in inches
+)
+
+
+combined <- tagList(
+  tags$div(
+    style = "display: flex; justify-content: space-between; align-items: center; margin-bottom: -5px;",
+    tags$div(style = "flex: 1; margin-right: 10px;", prop_p)
+  ),
+  tags$p(
+    style = "text-align: left; margin-top: -5px; font-style: italic; color: #989898;",
+      "Note: this plot is interactive. Hover over the bars to see more details about the funding amounts and programs."
+    )
+  )
+
+
+# Save or display
+browsable(combined)
+```
+
+# A Deeper Look: Provincial Funds for New Construction
+
+__Note that unit counts are unreliable, there is a some degree of double counting:__ the data redacts any project identifying information. Projects that have received funding from more than one of these sources will effectively have their units double counted. I believe the majority of provincially funded units are also NHS funded, so I am deferring to NHS data on unit counts any ways.
+
+There were 3,938 provincially-funded units completed in Ontario between 2020 and 2024. This is in comparison to 5,380 funded through the NHS. I believe the vast majority of provincially-funded units have NHS funding, so I am treating these as the same units. These unit counts should be used with caution. Due to the amount of information redacted in the dataset, I cannot identify projects that received funding from multiple provincial programs. This results in some projects being entered more than once and their units being double counted. I cannot evaluate how many units this results in, so I defer to the NHS numbers above for new construction counts.
+
+```{r}
+pfoi <- readr::read_csv("C:/Users/akfra/Documents/GitHub/ONPHA/provincial funding/cleaned_foi_data.csv")
+
+
+pfoi <- pfoi |>
+  mutate(
+    expected_completion_date_clean = str_replace_all(expected_completion_date, "[^0-9A-Za-z ]", "-"),
+    expected_completion_date_parsed = dmy(expected_completion_date_clean),
+    year = ifelse(!is.na(year_built), year_built, year(expected_completion_date_parsed))
+  )
+
+
+pfoi |>
+group_by(status) %>%
+  summarize(
+    total_units = sum(total_units, na.rm = TRUE),
+    afford_units = sum(affordable_units_created, na.rm = TRUE),
+    fund_amount = sum(fund_amount, na.rm = TRUE)
+  ) %>%
+  mutate(
+    "Funding Amount" = scales::dollar(fund_amount),
+    "Total Units" = scales::comma(total_units),
+    "Affordable Units" = scales::comma(afford_units),
+    "Unaffordable Units" = scales::comma(total_units - afford_units),
+    status = factor(status, levels = c("Completed", "Under Construction", "Approved",  "Planning"))
+  ) |>
+  select(
+    Status = status,
+    "Total Units",
+    "Affordable Units",
+    "Unaffordable Units",
+    "Funding Amount") |>
+  arrange(Status) |>
+  kableExtra::kable() |>
+  kableExtra::kable_styling(full_width = F, position = "left")
+```
+
+## Funding by Provincial Funding Source
+
+One important thing to note is that Federal transfers are a significant portion of these total funds. OPHI and COCHI are provincially administered National Housing Strategy programs, encompassing either joint funding, or Federal transfers. These two programs make up 49% of _provincial funds_ for new construction since 2020. 
+
+Additionally, these two programs become a much larger portion of the funding for newer projects. They account for 56% of funding for projects not yet complete, and 67% of funding for projects that are approved or in the planning stage.
+
+
+```{r}
+pfoi_year <- pfoi |>
+ # filter(!status %in% c("Completed", "Under Construction")) |>
+group_by(fund_source) %>%
+  summarize(
+    total_units = sum(total_units, na.rm = TRUE),
+    afford_units = sum(affordable_units_created, na.rm = TRUE),
+    fund_amount = sum(fund_amount, na.rm = TRUE),
+    "Number of Projects Funded" = scales::comma(n())
+  ) %>%
+  mutate(
+    "Funding Amount" = scales::dollar(fund_amount),
+    "Total Units" = scales::comma(total_units),
+    "Affordable Units" = scales::comma(afford_units),
+    "Unaffordable Units" = scales::comma(total_units - afford_units)
+  ) |>
+  arrange(desc(fund_amount)) |>
+  select(
+    "Fund Source" = fund_source,
+    "Funding Amount",
+    "Number of Projects Funded",
+    "Total Units",
+    "Affordable Units",
+    "Unaffordable Units") 
+
+pfoi_total <- pfoi |>
+  #filter(!status %in% c("Completed", "Under Construction")) |>
+  summarize(
+    total_units = sum(total_units, na.rm = TRUE),
+    afford_units = sum(affordable_units_created, na.rm = TRUE),
+    fund_amount = sum(fund_amount, na.rm = TRUE),
+    "Number of Projects Funded" = scales::comma(n())
+  ) %>%
+  mutate(
+    "Funding Amount" = scales::dollar(fund_amount),
+    "Total Units" = scales::comma(total_units),
+    "Affordable Units" = scales::comma(afford_units),
+    "Unaffordable Units" = scales::comma(total_units - afford_units),
+    fund_source = "Total"
+  ) |>
+  arrange(desc(fund_amount)) |>
+  select(
+    "Fund Source" = fund_source,
+    "Funding Amount",
+    "Number of Projects Funded",
+    "Total Units",
+    "Affordable Units",
+    "Unaffordable Units") 
+
+bind_rows(pfoi_total, pfoi_year)|>
+  kableExtra::kable() |>
+  kableExtra::kable_styling(full_width = F, position = "left")
+```
+
+## Funding by year of project completion or expected completion
+
+Here I tied funding amount to the year of project completion or expected completion, as this is the only temporal data provided. This is likely not when all funding was actually allocated, but it provides a rough temporal sense of funding commitments.
+
+
+```{r fund-by-year,  fig.width = 7, fig.height=6}
+pfoi_year <- pfoi |>
+group_by(fund_source, year) %>%
+  summarize(
+    fund_amount = sum(fund_amount, na.rm = TRUE),
+    total_units = sum(total_units, na.rm = TRUE),
+    afford_units = sum(affordable_units_created, na.rm = TRUE),
+    "Funding Amount" = paste0("$", round(sum(fund_amount, na.rm = TRUE)/1000000,1)),
+    "Number of Projects Funded" = n()
+  ) %>%
+  mutate(
+    "Total Units" = scales::comma(total_units),
+    "Affordable Units" = scales::comma(afford_units),
+    "Unaffordable Units" = scales::comma(total_units - afford_units)
+  ) |>
+  arrange(desc(fund_amount)) |>
+  select(
+    year,
+    "Fund Source" = fund_source,
+    fund_amount,
+    "Funding Amount",
+    "Number of Projects Funded",
+    "Total Units",
+    "Affordable Units",
+    "Unaffordable Units")
+
+pfoi_total <-  pfoi |>
+group_by(year) %>%
+  summarize(
+        fund_amount = sum(fund_amount, na.rm = TRUE),
+    total_units = sum(total_units, na.rm = TRUE),
+    afford_units = sum(affordable_units_created, na.rm = TRUE),
+    "Funding Amount" = paste0("$", round(sum(fund_amount, na.rm = TRUE)/1000000,1)),
+    "Number of Projects Funded" = n()
+  ) %>%
+  mutate(
+    
+    "Total Units" = scales::comma(total_units),
+    "Affordable Units" = scales::comma(afford_units),
+    "Unaffordable Units" = scales::comma(total_units - afford_units),
+    fund_source = "Total"
+  ) |>
+  select(
+    year,
+    "Fund Source" = fund_source,
+    fund_amount,
+    "Funding Amount",
+    "Number of Projects Funded",
+    "Total Units",
+    "Affordable Units",
+    "Unaffordable Units")
+
+pfoi_funds <- bind_rows(pfoi_year, pfoi_total) |> filter(year > 2017)
+
+pfoi_funds <- pfoi_funds |>
+  mutate(
+    `Fund Source` = str_wrap(`Fund Source`, width = 60),
+    tooltip = paste0(
+          "Fund Source: ", `Fund Source`, "<br>",
+          "Year: ", year, "<br>",
+          "Funding Amount: ", scales::dollar(fund_amount), "<br>",
+          "Number of Projects Funded: ", `Number of Projects Funded`, "<br>",
+          "Total Units: ", `Total Units`, "<br>",
+          "Affordable Units: ", `Affordable Units`, "<br>",
+          "Unaffordable Units: ", `Unaffordable Units`))
+
+source_levels <- pfoi_funds |> group_by(`Fund Source`) |> summarize(amount = sum(fund_amount, na.rm = T)) |> arrange(desc(amount)) |> pull(`Fund Source`)
+
+pfoi_funds <- pfoi_funds |>
+  mutate(`Fund Source` = factor(`Fund Source`, levels = source_levels))
+
+p <- ggplot(pfoi_funds, aes(x = year, y = fund_amount, fill = `Fund Source`)) +
+  geom_col_interactive(aes(tooltip = tooltip) ,
+                       position = position_dodge()) +
+  #scale_fill_manual(values = c("#ec008c", "#fcb900", "#0693e3", "#9b51e0", "#ff6900")) +
+  scale_y_continuous(labels = scales::dollar) +
+  geom_text_interactive(
+    aes(x = year, y = fund_amount, label = "",
+        tooltip = tooltip),
+
+        inherit.aes = FALSE) +
+  geom_text(
+    aes(x = year, y = fund_amount,  label = `Funding Amount`),
+    vjust = -0.5,
+    size = lab_size_widget,
+    inherit.aes = FALSE
+  ) +
+  labs(
+    title = "Funding Amount by Year (MILLIONS)",
+    x = "Year",
+    y = "Funding Amount (MILLIONS)",
+    fill = "Fund Source"
+  ) +
+  custom_theme(base_theme = theme_bw(), add_size = -16) +
+  theme(legend.position = "none",
+        axis.text.y = element_blank(),
+        axis.text.x = element_text(size = 10)) +
+  facet_wrap(~`Fund Source`, ncol = 2) +
+  scale_y_continuous(expand = expansion(mult = c(0.05, 0.5))) 
+
+p3 <- girafe(
+  ggobj = p,
+  options = list(opts_zoom(min = 0.21, max = 10))
+  #width_svg = 7,    # Set the width of the output in inches
+  #height_svg = 3    # Set the height of the output in inches
+)
+
+combined <- tagList(
+  tags$div(
+    style = "display: flex; justify-content: space-between; align-items: center; margin-bottom: -5px;",
+    tags$div(style = "flex: 1; margin-right: 10px;", p3)
+  ),
+  tags$p(
+    style = "text-align: left; margin-top: -5px; font-style: italic; color: #989898;",
+    HTML(
+      "Note: this plot is interactive. Look at the icons on the top right of each plot to enable different interactive actions, such as scrolling in or zooming. Hover over the bars to see more details about the funding amounts and programs."
+    )
+  )
+)
+
+
+# Save or display
+browsable(combined)
+
+```
+
+
+
+
